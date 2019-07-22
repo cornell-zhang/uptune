@@ -10,8 +10,8 @@ Pull back the repo and install the package with `install` mode
 
 ```
 pip install ray pandas xgboost sklearn pyzmq matplotlib psutil setproctitle
-git clone https://github.com/Hecmay/UpTune.git
-cd UpTune; python setup.py install 
+git clone https://github.com/cornell-zhang/uptune.git
+cd uptune; python setup.py install 
 ```
 
 ### User Interface 

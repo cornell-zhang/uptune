@@ -4,54 +4,77 @@ A Generic Distributed Auto-Tuning Infrastructure
 
 ## Getting Started
 
-### Installing
+### Installation
 
 Pull back the repo and install the package with `install` mode
 
 ```
-pip install ray pandas xgboost sklearn pyzmq matplotlib psutil setproctitle
 git clone https://github.com/cornell-zhang/uptune.git
-cd uptune; python setup.py install 
+cd uptune; pip install -e . 
 ```
 
-### User Interface 
-
-Specify the tuning variables with either non-intrusive annotations or tuning APIs.
-
-#### (1) Non-intrusive Annotation 
-
-The annonation should specify the variable name, as well as its type and range for auto-tuning. The annotation based declaration should be wrapped in `{% %}` specifier, and can be either attched to the preceding line or in the same line where the variable is declared. 
+### Quick Start 
+ 
+Here's a quick example to tune the hyperparameters in a Multilayer Perceptron (MLP) for improved classification accuracy. Import `uptune` package and declare the tunable variables using `var = ut.tune(default, range)`, then specify the return value with `ut.feedback(value, objective)`
 
 ```python
-# tune `depth` in an integer range from 0 to 2 with default value of 1
-# optional argument 'name' is an indetifier used to track the var's tuning trend 
-depth = 0 # {% depth=TuneInt(1, (0,2), 'name') %}
+import uptune as ut
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Activation
 
+model = Sequential([
+    # search units on integer number space
+    Dense(ut.autotune(100, (50, 150)), input_shape=input_shape, activation='relu'),
+    # search dropout rate on real value space
+    Dropout(ut.tune(0.5, (0.2, 0.7))),
+    # search activation with provided enumerate list
+    Dense(1, activation=ut.autotune('softmax', ['sigmoid', 'softmax']))
+    ])
+
+model.compile(loss='categorical_crossentropy',
+              optimizer=ut.autotune('sgd', ['adam', 'rmsprop', 'sgd', 'adadelta']),
+              metrics=['accuracy'])
+model.fit(x_train, y_train, epochs=20, batch_size=128)
+
+# maximize classification accuracy on test dataset
+score = ut.feedback(model.evaluate(x_test, y_test, batch_size=128),
+                    objective='max')
 ```
-The tuning modes include Boolean, Enumeration Integer and Float, all with similar function signature. 
+Save the model and start tuning it with `uptune file.py [args for file.py] -pf 4 --timeout 36000`. UpTune will tune the model across 4 local threads until the time budget (in seconds) is exhausted. To execute the model with default values, run `python file.py [args for file]`
 
-```python
-a = 1.7  # {% a=TuneFloat(1.7, (0,2)) %}
-b = True # {% b=TuneBool(True, ()) %}
-c = 'On' # {% c=TuneEnum('On', ['On', 'Off', 'Auto'], 'Mode') %}
+### User Interface Details 
 
-```
+Specify the tuning variables with either tuning APIs or non-intrusive annotation.
 
-#### (2) Declaration with Tuning APIs 
+#### Tunable Variables Declaration
 
-Apart from annotation, the user can also call `uptune` API to specify the tuning range, and the tuning type (e.g. Integer or Enumeration will be inferred automatically). Notice that we do not support mixed declaration of annotation and tuning APIs. 
+Call `autotune` API to specify the tuning range, and the tuning type (e.g. Integer, Real or Enumeration range will be inferred automatically). Notice that we do not support mixed declaration of tuning APIs and annotation approach. 
 
 ```python
 from uptune import autotune
 
 # tune integer `a` from 1 to 9, with default of 2
-a = autotune(2, (1, 9))
-b = autotune('On', ['On', 'Off', 'Auto'], name='switch')
+# optional arg 'name' is an identifier to track the var's tuning trend 
+a = autotune(2, (1, 9), name='value')
+b = autotune('On', ['On', 'Off', 'Auto'])
 ```
+
+(Optional) UpTune also supports annonation based approach, which allows users to decalre tunable variables and their desired range in comments. The annotation based declaration should be wrapped in `{% %}` specifier, and can be either attched to the preceding line or in the same line where the variable is declared.
+
+```python
+# tune `depth` in an integer range from 0 to 2 with default value of 1
+depth = 0 # {% depth=TuneInt(1, (0,2), 'name') %}
+
+a = 1.7  # {% a=TuneFloat(1.7, (0.0,2.0)) %}
+b = True # {% b=TuneBool(True, ()) %}
+c = 'On' # {% c=TuneEnum('On', ['On', 'Off', 'Auto'], 'Mode') %}
+
+```
+Supported tuning modes include Boolean, Enumeration, Integer and Float, all with similar function signature. 
 
 #### Return the QoR (Quality of Result) 
 
-and finally specify the return value that you want to maximize or minimize
+specify the return value that you want to maximize or minimize
 
 ```python
 import uptune

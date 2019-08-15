@@ -4,3 +4,10 @@ future
 jinja2
 numpy>=1.8.0
 SQLAlchemy>=0.8.2
+ray 
+pandas 
+xgboost 
+sklearn 
+matplotlib 
+psutil 
+setproctitle

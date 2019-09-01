@@ -9,5 +9,6 @@ pandas
 xgboost 
 sklearn 
 matplotlib 
+pulp
 psutil 
 setproctitle

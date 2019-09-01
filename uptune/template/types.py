@@ -2,8 +2,9 @@ import uuid, os, copy, json
 from builtins import object
 # from uptune.template.pipeline import server
 # from uptune.template.pubsub import subscriber
+from uptune.add import constraint
 from uptune.template.access import request, retrieve
-from uptune.utils.codegen import random_name, TPL_INT, TPL_ENUM
+from uptune.utils.codegen import random_name, TPL_INT, TPL_ENUM, TPL_FLOAT
 
 
 class MetaInstanceRegistry(type):
@@ -27,7 +28,6 @@ class MetaInstanceRegistry(type):
         """
         get all instances of in the registry. return
         search subclasses recursively if recursive=True. 
-
         """
         instances = list(cls._instances)
         if recursive:
@@ -44,18 +44,19 @@ class MetaInstanceRegistry(type):
             Child._remove_instance(instance)
 
 
-
-class Registry(object):
-    __metaclass__ = MetaInstanceRegistry
+class Registry(metaclass=MetaInstanceRegistry):
+    pass
 
 
 class TuneBase(Registry):
     """ Base class for Tune Class """
     stage, index, count = 0, -1, -1
-    names, params, proposal, deck = set(), list(), dict(), dict()
+    names, params, proposal = set(), list(), dict()
     def __init__(self, default, scope, name):
         self.value  = default 
         self.scope  = scope
+        self.name   = name
+        self.args   = None
         self.driver = None
         self.node   = None
 
@@ -66,24 +67,35 @@ class TuneBase(Registry):
         return default if flag is off 
         call controller for proposal cfg with flag on
         """
-        if os.getenv("EZTUNING") is None:
+        if not os.getenv("EZTUNING"):
             return self.value
         
-        # ---------------------------
-        # analyze/generate params 
-        # ---------------------------
-        if os.getenv("ANALYSIS") is not None:
-            token = copy.deepcopy((TPL_INT if isinstance(self.scope, tuple) \
-                                   else TPL_ENUM)) 
-            token[1] = random_name(TuneBase.names)
-            token[2] = self.scope
-            TuneBase.params.append(token)
+        if os.getenv("ANALYSIS"): 
+
+            # analyze params for enum
+            if isinstance(self.scope, list) or callable(self.scope): 
+                token = copy.deepcopy(TPL_ENUM)
+                token[1] = random_name(TuneBase.names)
+                if self.args: # scope = (lambda, args)
+                    self.scope = (self.scope, self.args)
+                token[2] = self.scope
+                TuneBase.params.append(token)
+
+            else: # infer and register numerical op
+                lb, ub = self.scope
+                name = random_name(TuneBase.names)
+                constraint.VarNode.reg(name, lb, ub)
+
+                tpl = TPL_INT if isinstance(lb, int) and \
+                                 isinstance(ub, int) else TPL_FLOAT
+                token = copy.deepcopy(tpl)
+                token[1] = name
+                token[2] = self.scope
+                TuneBase.params.append(token)
+    
             return self.value
 
-        # ---------------------------
-        # servers pull from queue 
-        # ---------------------------
-        else:
+        else: # servers pull from queue 
             if TuneBase.count == -1: 
                 assert os.path.isfile('params.json'), 'no params available'
                 assert os.getenv("STAGE"), 'no specified stage'
@@ -96,7 +108,7 @@ class TuneBase(Registry):
 
                 if not os.getenv('AWS'):
                     TuneBase.proposal = request(TuneBase.index, stage)
-                else: # download data from aws s3
+                else: # load data from aws s3
                     import boto3
                     from botocore import UNSIGNED
                     from botocore.client import Config
@@ -114,10 +126,7 @@ class TuneBase(Registry):
                     TuneBase.params = params[stage]
                 fp.close()
 
-                # ----------------------------------------
-                # pull back best cfg from previous stages
-                # ----------------------------------------
-                if stage > 0:
+                if stage > 0: # pull back best cfg from previous stages
                     for idx in reversed(range(0, stage)):
                         TuneBase.params = params[idx] + TuneBase.params
                         TuneBase.proposal.update(retrieve(idx))
@@ -160,10 +169,11 @@ class TuneEnum(TuneBase):
     """
     class template for tuning enumeration variable 
     """
-    def __init__(self, default, scope, name=None):
+    def __init__(self, default, scope, args=None, name=None):
         super(TuneEnum, self).__init__(default, scope, name)
         assert type(scope) == list, "list scope for TuneEnum"
         assert len(scope) > 1, "at least one option in scope for TuneEnum"
+        if args: self.args = args
         self.scope = scope
 
 
@@ -224,5 +234,6 @@ if __name__ == '__main__':
     from uptune import feedback
     res = feedback(factoe * 2)
     print(res)
+
 
 

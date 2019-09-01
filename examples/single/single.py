@@ -1,9 +1,12 @@
-from uptune import autotune, feedback
+import uptune as ut
 
 pool = ['a', 'b', 'c', 'd', 
         'e', 'f', 'g', 'h',
         'i', 'j', 'k', 'm']
-a = autotune('a', pool)
-b = autotune('c', pool)
+a = ut.tune('a', pool)
+b = ut.tune('c', pool)
+c = ut.tune(0.2, (0.1, 0.9))
+d = ut.tune(2, (1, 9))
 
-val = feedback(hash(a) - hash(b))
+val = ut.target(c * hash(a) - \
+                d * hash(b))

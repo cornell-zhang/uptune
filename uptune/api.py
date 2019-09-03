@@ -343,10 +343,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         actors = [self.cls.remote(_, 0, self.args) 
                       for _ in range(self._parallel)]
   
-        # ----------------------------------------
-        # the user specifies the training data + models 
-        # which will be used for proposal pruning 
-        # ----------------------------------------
+        # user specified training data + models 
         self._models = self.training(self.args.learning_models) 
   
         start_time = time.time() 
@@ -357,9 +354,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 if desired_result is None:
                     continue
   
-                # ---------------------------------------------
                 # prune and report back to opentuner database 
-                # ---------------------------------------------
                 while self.prune(api, 0, desired_result) == False:
                     log.warning("duplicate configuration request by %s from node %d", 
                         desired_result.requestor,
@@ -369,12 +364,11 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 drs.append(desired_result)
                 cfgs.append(desired_result.configuration.data)
             
-            # ------------------------------------------
             # assert and run in parallel with ray remote
-            # ------------------------------------------
             assert len(cfgs) == self._parallel, "All available cfgs have been explored"
-            log.info('%s start tuning in parallel. global_best is %f', 
+            log.info('%s tuning across %d nodes. global_best is %f', 
                          str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                         self._parallel,
                          self._best[0] if self._best else float('inf'))
 
             if not template: # dtribute drs across nodes
@@ -400,9 +394,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                                    dr.requestor,
                                    result.time)
   
-            # -----------------------------------------
-            # synchronize the result from all nodes
-            # -----------------------------------------
+            # synchronize across nodes
             for api in apis:
                 self.synchronize(0, api, apis.index(api), epoch)
             elapsed_time = time.time() - start_time
@@ -414,7 +406,16 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
   
         for api in apis:
             api.finish()
-        return [api.get_best_configuration() for api in apis]
+        log.info('%s tuning complete. global_best is %f', 
+                     str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                     self._best[0] if self._best else float('inf'))
+      
+        # save best cfg into json 
+        with open('../uptune.json', 'w') as f:
+            json.dump(self._cfg, f)
+        log.info('%s tuning complete. best cfg save in uptune.json', 
+                     str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        return self._cfg
 
 
     # ------------------------------------

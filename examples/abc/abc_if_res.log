@@ -1,3 +1,3 @@
-ABC command line: "read i10.aig;refactor;refactor;refactor -z;balance;rewrite -z;refactor;refactor;refactor -z;resub -K 6;rewrite -z;rewrite;balance;rewrite -z;resub -K 6;rewrite;balance;rewrite -z;rewrite;rewrite -z;resub -K 6;rewrite;refactor;balance;refactor;if -K 6;print_stats".
+ABC command line: "read i10.aig;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;balance;if -K 6;print_stats".
 
-[1;37mi10                           :[0m i/o =  257/  224  lat =    0  nd =   586  edge =   2450  aig  =  2604  lev = 8
+[1;37mi10                           :[0m i/o =  257/  224  lat =    0  nd =   649  edge =   2800  aig  =  4034  lev = 9

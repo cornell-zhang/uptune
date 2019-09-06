@@ -12,6 +12,11 @@ Pull back the repo and install the package with `install` mode
 git clone https://github.com/cornell-zhang/uptune.git
 cd uptune; pip install -e . 
 ```
+#### For MacOS users 
+Please install gcc8 for XGBoost
+```
+brew install gcc@8
+```
 
 ### Quick Start 
  

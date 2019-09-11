@@ -491,7 +491,8 @@ def mpisystem(args, command):
     # setattr(SingleProcess, 'parse', 
     #         parse_builder(tpl, mode))
 
-    actor_cls = ray.remote(SingleProcess)
+    actor_cls = ray.remote(num_gpus=args.gpu_num,
+                           num_cpus=args.cpu_num)(SingleProcess)
     pt.set_actor_cls(actor_cls)
     pt.before_run(copy=True)
 

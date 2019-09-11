@@ -4,20 +4,12 @@ import xml.etree.ElementTree
 from uptune.template import types
 from uptune.add import constraint
 
-# function decorator to dump feedback 
 def save(objective='min'):
     def decorator(function):
         @functools.wraps(function)
         def run(*args, **kwargs):
             res = function(*args, **kwargs)
-            assert isinstance(res, (int, float)), \
-                   "the feedback must be of real-value data type"
-            assert objective in ['max', 'min'], \
-                   "the objective can be either 'min' or 'max'"
-            with open('res-0.json', 'w') as fp:
-                json.dump([res,objective], fp)
-            fp.close()
-            return res
+            return target(res, objective)
         return run
     return decorator
 

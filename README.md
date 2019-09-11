@@ -20,7 +20,7 @@ brew install gcc@8
 
 ### Quick Start 
  
-Here's a quick example to tune the hyperparameters in a Multilayer Perceptron (MLP) for improved classification accuracy. Import `uptune` package and declare the tunable variables using `var = ut.tune(default, range)`, then specify the return value with `ut.feedback(value, objective)`
+Here's a quick example to tune the hyperparameters in a Multilayer Perceptron (MLP) for improved classification accuracy. Import `uptune` package and declare the tunable variables using `var = ut.tune(default, range)`, then specify the return value with `ut.target(value, objective)`
 
 ```python
 import uptune as ut
@@ -84,10 +84,10 @@ specify the return value that you want to maximize or minimize
 ```python
 import uptune as ut
 
-# return real-value with uptune.feedback()
+# return real-value with uptune.target()
 ret = ut.target(a * 3, 'min')
 
-# or sepcify the return value with ut.save wrapper
+# or return with ut.save decorator
 @ut.save('max')
 def func(a, b, c):
     return a * 3

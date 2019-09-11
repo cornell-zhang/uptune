@@ -7,6 +7,11 @@
   * support automatic deployment to local/aws/gcp
   * support autotuning with inter-variable constraint  
 
+### 2019-09-11 
+  * added constraint features 
+  * added support for tuning across gpus
+  * updated target decorator (support ut.tune inside)
+
 ### 2019-09-01 
   * updated api for automatic tuning type inference 
   * updated module import mechanism for constraint feature

@@ -35,6 +35,10 @@ argparser.add_argument('--offline', action='store_true',
                        help="enable re-training for multi-stage")
 argparser.add_argument('--aws', action='store_true', default=False,
                        help="use aws s3 storage for publishing")
+argparser.add_argument('--gpu-num', type=int, default=1,
+                       help="max number of gpu for each task")
+argparser.add_argument('--cpu-num', type=int, default=1,
+                       help="max number of cpu for each task")
 
 log = logging.getLogger(__name__)
 

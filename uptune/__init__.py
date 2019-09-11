@@ -68,7 +68,7 @@ class module(ModuleType):
 
         # ut.var returns 0 in default mode 
         try: return ModuleType.__getattribute__(self, name)
-        except: return 0
+        except: return True
 
     def __dir__(self):
         """ extend dir content """

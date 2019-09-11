@@ -75,7 +75,7 @@ class TuneBase(Registry):
             # analyze params for enum
             if isinstance(self.scope, list) or callable(self.scope): 
                 token = copy.deepcopy(TPL_ENUM)
-                token[1] = random_name(TuneBase.names)
+                token[1] = random_name(TuneBase.names, self.name)
                 if self.args: # scope = (lambda, args)
                     self.scope = (self.scope, self.args)
                 token[2] = self.scope
@@ -83,8 +83,8 @@ class TuneBase(Registry):
 
             else: # infer and register numerical op
                 lb, ub = self.scope
-                name = random_name(TuneBase.names)
-                constraint.VarNode.reg(name, lb, ub)
+                name = random_name(TuneBase.names, self.name)
+                constraint.register(name, lb, ub)
 
                 tpl = TPL_INT if isinstance(lb, int) and \
                                  isinstance(ub, int) else TPL_FLOAT

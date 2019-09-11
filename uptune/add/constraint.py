@@ -1,49 +1,58 @@
 #!/usr/bin/env python
 import os, sys 
+from sympy import Symbol
+from sympy.core.relational import Relational
 from uptune.template import types
-from pulp import LpVariable 
+from uptune.add import constraint as shared
 
-class VarNode(LpVariable):
+class VarNode(Symbol):
     """
-    Var Node for Constraint Net
+    VarNode for Constraint Net
+    override ops for constraint record 
     """
     nodes = dict()
     constraint = []
-    def __init__(self, name, lower, upper):
-        super(VarNode, self).__init__(name, lower, upper)
 
-    @classmethod
-    def reg(cls, name, lower, upper):
-        """ 
-        register node with constraint
-        """
-        assert isinstance(lower, (float, int, VarNode)), \
-               "invalid lower bound type"
-        assert isinstance(upper, (float, int, VarNode)), \
-               "invalid upper bound type"
-        assert name not in VarNode.nodes.keys(), \
-               "duplicate name defined"
-        VarNode.nodes[name] = cls(name, lower, upper) 
+    def __new__(cls, name, *args):
+        return super(VarNode, cls).__new__(cls, name)
+
+    def __init__(self, name, lower, upper):
+        super(VarNode, self).__init__()
+        self.name  = name
+        self.lower = lower
+        self.upper = lower
+
+def register(name, lower, upper):
+    """ 
+    register node with constraint
+    """
+    assert isinstance(lower, (float, int, VarNode)), \
+           "invalid lower bound type"
+    assert isinstance(upper, (float, int, VarNode)), \
+           "invalid upper bound type"
+    shared.VarNode.nodes[name] = VarNode(name, lower, upper) 
            
 
 def constraint(*args):
     """
-    Add constrains to search engine.
+    add constrains to search engine.
+    information collected in analysis mode
     --------------
     Parameters:
         args: exprs on vars 
     """
-    for i in range(len(args)):
-        print(args[i])
-    
+    if os.getenv("ANALYSIS"): 
+        for arg in args:
+            assert isinstance(arg, Relational), \
+                   "invalid constraint type" + str(type(arg))
+            shared.VarNode.constraint.append(arg)
 
 if __name__ == "__main__":
     import uptune as ut
-    from uptune.add import constraint as shared
-    shared.VarNode.reg('a', 0, 3)
+    register('a', 0, 3)
+    register('b', 2, ut.a)
+    register('c', 2.0, 9.7)
     print(type(ut.a))
-    shared.VarNode.reg('b', 2, ut.a)
-    shared.VarNode.reg('c', 2.0, 9.7)
     print(shared.VarNode.nodes)
-    ut.constraint(ut.a <= ut.b, 
+    ut.constraint(ut.a * ut.a <= ut.b * ut.b, 
                   ut.a + ut.c >= 7.5) 

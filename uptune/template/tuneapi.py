@@ -51,7 +51,6 @@ def tune(default,
 
     if len(tuning_range) == 2:
         lower, upper = tuning_range
-        assert lower < upper, "range value error"
         if isinstance(lower, float) or isinstance(upper, float):
             return types.TuneFloat(default, 
                                    tuning_range,
@@ -63,7 +62,6 @@ def tune(default,
     assert len(tuning_range) == 0 and \
            isinstance(default, bool), \
            "for boolean range should be ()"
-
     return types.TuneBool(default, 
                           name=name).val
 

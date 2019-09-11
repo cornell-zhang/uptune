@@ -27,10 +27,14 @@ OBJ   = r'(\S+)\s*=\s*TuneRes\((?:(max)|(min))\)'  # capture the obejctive
 unique, objective = set(), set()
 
 
-def random_name(unique):
+def random_name(unique, name):
     """
     generate a random name for tuning variable 
     """
+    if name: # check dup
+        assert name not in unique, "duplicate name: " + name
+        unique.add(name)
+        return name
     chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     while True:
         value = "".join(random.choice(chars) for _ in range(8))

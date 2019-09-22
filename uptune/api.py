@@ -1,11 +1,11 @@
-from uptune.opentuner.api import TuningRunManager
 from future.utils import with_metaclass
 from multiprocessing.pool import ThreadPool
 from datetime import datetime
-import abc, argparse, json, os, ray, logging, threading, time, subprocess, copy
+import abc, argparse, json, os, ray, logging
+import threading, time, subprocess, copy, sys
 
-import uptune, sys
 from uptune.utils.jinjatpl import JinjaParser
+from uptune.opentuner.api import TuningRunManager
 from uptune.opentuner.measurement import MeasurementInterface
 from uptune.opentuner.resultsdb.models import Result
 from uptune.opentuner.search.manipulator import ConfigurationManipulator
@@ -66,6 +66,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         self._models     = list()                  # pretrained ML model list
         self._apis       = list()
         self._actors     = list()
+        self._archive    = list()
         self._glbsession = list()
         self.pids        = list()
         self.pid_lock    = threading.Lock()
@@ -398,10 +399,14 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                                    dr.requestor,
                                    result.time)
   
-            # synchronize across nodes
-            for api in apis:
+            for api in apis: # sync across nodes
                 self.synchronize(0, api, apis.index(api), epoch)
+
+            # time check and plot diagram
             elapsed_time = time.time() - start_time
+            self._archive.append([elapsed_time, self._best[0]])
+            with open('../archive.json', 'w') as fp:
+                json.dump(self._archive, fp)
             if elapsed_time > float(self.args.timeout): 
                 log.info('%s runtime exceeds timeout %ds. global_best is %f', 
                              str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),

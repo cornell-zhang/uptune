@@ -4,7 +4,7 @@ from datetime import datetime
 import abc, argparse, json, os, ray, logging
 import threading, time, subprocess, copy, sys
 
-from uptune.utils.jinjatpl import JinjaParser
+from uptune.src.jinjatpl import JinjaParser
 from uptune.opentuner.api import TuningRunManager
 from uptune.opentuner.measurement import MeasurementInterface
 from uptune.opentuner.resultsdb.models import Result
@@ -25,7 +25,7 @@ argparser.add_argument('--parallel-factor', '-pf', type=int, default=2,
                        help="number of processes spawned by Parallel Python")
 argparser.add_argument('--params-json', '-pj', type=str, default="params.json",
                        help="search space definition in json")
-argparser.add_argument('--runtime-limit', '-rt', type=int, default=1800,
+argparser.add_argument('--runtime-limit', '-rt', type=int, default=7200,
                        help="kill process if runtime exceeds {} seconds")
 argparser.add_argument('--learning-models', '-lm', action="append", default=[],
                        help="single or ensemble of learning models for space pruning")
@@ -35,6 +35,8 @@ argparser.add_argument('--offline', action='store_true',
                        help="enable re-training for multi-stage")
 argparser.add_argument('--aws', action='store_true', default=False,
                        help="use aws s3 storage for publishing")
+argparser.add_argument('--cfg', action='store_true', default=False,
+                       help="display configuration on screen")
 argparser.add_argument('--gpu-num', type=int, default=1,
                        help="max number of gpu for each task")
 argparser.add_argument('--cpu-num', type=int, default=1,
@@ -342,8 +344,8 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         coarse-grained tuning for python proragms 
         before_run() should be called to load params 
         """
-        apis = [self.create_tuning(x, 0, self.create_params()) 
-                    for x in range(self._parallel)]
+        self._apis = [self.create_tuning(x, 0, self.create_params()) 
+                          for x in range(self._parallel)]
   
         actors = [self.cls.remote(_, 0, self.args) 
                       for _ in range(self._parallel)]
@@ -354,8 +356,9 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         start_time = time.time() 
         for epoch in range(self._limit):
             drs, cfgs = list(), list()
-            for api in apis:
-                desired_result = api.get_next_desired_result()
+            for api in self._apis:
+                try: desired_result = api.get_next_desired_result()
+                except: desired_result = None
                 if desired_result is None:
                     continue
   
@@ -363,18 +366,19 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 while self.prune(api, 0, desired_result) == False:
                     log.warning("duplicate configuration request by %s from node %d", 
                         desired_result.requestor,
-                        apis.index(api))
+                        self._apis.index(api))
                     desired_result = api.get_next_desired_result()
   
                 drs.append(desired_result)
                 cfgs.append(desired_result.configuration.data)
             
             # assert and run in parallel with ray remote
+            truncate = lambda x: x + "..." if len(x) > 75 else x
             assert len(cfgs) == self._parallel, "All available cfgs have been explored"
-            log.info('%s tuning across %d nodes. global_best is %f', 
-                         str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                         self._parallel,
-                         self._best[0] if self._best else float('inf'))
+            log.info('running on %d nodes. global best: %f, best cfg %s', 
+                     self._parallel,
+                     self._best[0] if self._best else float('inf'),
+                     truncate(str(self._cfg)) if self.args.cfg else 'saved')
 
             if not template: # dtribute drs across nodes
                 self.publish(drs, stage=0)
@@ -391,29 +395,29 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             qors = ray.get(objects)
             results = [Result(time=item[-1]) for item in qors]
   
-            for api, dr, result in zip(apis, drs, results):
+            for api, dr, result in zip(self._apis, drs, results):
                 api.report_result(dr, result)
                 self.global_report(0, epoch, api,
-                                   apis.index(api), 
+                                   self._apis.index(api), 
                                    dr.configuration.data, 
                                    dr.requestor,
                                    result.time)
   
-            for api in apis: # sync across nodes
-                self.synchronize(0, api, apis.index(api), epoch)
+            for api in self._apis: # sync across nodes
+                self.synchronize(0, api, self._apis.index(api), epoch)
 
             # time check and plot diagram
             elapsed_time = time.time() - start_time
-            self._archive.append([elapsed_time, self._best[0]])
+            self._archive.append([elapsed_time, self._cfg, self._best[0]])
             with open('../archive.json', 'w') as fp:
                 json.dump(self._archive, fp)
             if elapsed_time > float(self.args.timeout): 
                 log.info('%s runtime exceeds timeout %ds. global_best is %f', 
                              str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                             int(elasped_time), self._best[0])
+                             int(elapsed_time), self._best[0])
                 break 
   
-        for api in apis:
+        for api in self._apis:
             api.finish()
         log.info('%s tuning complete. global_best is %f', 
                      str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),

@@ -36,9 +36,12 @@ def single_run_builder(cmd, timeout):
         # run the executable script with time limit
         result = self.call_program(cmd, limit=timeout)
         if result['returncode'] != 0: 
-            log.warning("process collapsed with error on \
-                         node %d, error msg: %s", \
-                         self.index, result['stderr'])
+            log.warning("process collapsed with error on " + \
+                         "node %d, error msg: %s", \
+                         self.index, result['stderr'].decode('utf-8'))
+            if not result['stderr'].decode('utf-8'):
+                log.warning("current runtime limit is %d. " + \
+                            "consider increase with -rt option", timeout)
             self.end_run()
             return [-1, float('inf')]
 

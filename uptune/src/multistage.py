@@ -65,25 +65,19 @@ def multirun(self, template=False):
     if self.args.offline:
         log.info('running on pure offline mode')
 
-    # ---------------------------------------------
     # run trails 3*pf. randomly pick p from 1.5*pf
-    # ---------------------------------------------
     total, ratio = 6, 0.5
     split = int(total * ratio * self._parallel)
     for epoch in range(self._limit):
 
-        # ------------------------------------
         # generated pending-status dr
-        # ------------------------------------          
         drpool, idxpool = list(), list()
         while len(drpool) < total * self._parallel:
             drs, idxs = self.generate_dr() 
             drpool += drs
             idxpool += idxs
 
-        # ----------------------------------------
-        #  generate features/scores into pool
-        # ----------------------------------------
+        # generate features/scores into pool
         scores, ftpool = list(), list() 
         for index in range(total):
             start = self._parallel * index
@@ -121,9 +115,7 @@ def multirun(self, template=False):
         ranking = array # np.sort(array, order = 'pred')
         idx = random.sample(range(split, len(ranking)), self._parallel) 
 
-        # --------------------------------------------
         # create drs/mapping to node api and validate
-        # --------------------------------------------
         drs = [item[1] for item in ranking[idx]]
         fts = [item[2] for item in ranking[idx]]
         mapping = dict([(item[1], item[0]) 
@@ -146,9 +138,7 @@ def multirun(self, template=False):
         self.rpt_and_sync(epoch, drs, results, mapping)
         qors = [obj.time for obj in results]
 
-        # ----------------------------------------------
         # retrain models based on qor (default hybrid) 
-        # ----------------------------------------------
         if not self.args.offline:
             for ins in self._models:
                 ins.cache(epoch, fts, qors)

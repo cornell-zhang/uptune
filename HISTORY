@@ -7,6 +7,11 @@
   * support automatic deployment to local/aws/gcp
   * support autotuning with inter-variable constraint  
 
+### 2019-10-10 
+  * fixed the sqlalchemy cfg generation issue
+  * added the runtime limit increase reminder
+  * added the cfg display support with `--cfg` arg
+
 ### 2019-09-11 
   * added constraint features 
   * added support for tuning across gpus

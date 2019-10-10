@@ -1,6 +1,6 @@
 import re, os, sys, json, copy, random, ray, uptune, logging, subprocess
 from uptune.api import ParallelTuning, RunProgram
-from uptune.utils.intrusive import mpisystem
+from uptune.src.intrusive import mpisystem
 
 log = logging.getLogger(__name__)
 

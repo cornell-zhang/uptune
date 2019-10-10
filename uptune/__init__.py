@@ -32,7 +32,8 @@ all_by_module = {
         "save",
         "target",
         "interm",
-        "vhls"
+        "vhls",
+        "quartus"
     ],
     "uptune.quickest": [
         "preprocess",

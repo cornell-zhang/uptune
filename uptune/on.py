@@ -6,7 +6,7 @@ import uptune
 import logging
 from datetime import datetime
 from importlib import import_module 
-from uptune.utils.codegen import codegen
+from uptune.src.codegen import codegen
 
 log = logging.getLogger(__name__)
 
@@ -121,26 +121,21 @@ def main():
     sys.argv = sys.argv[:1] + unknown
     command = ' '.join(sys.argv)
  
-    # ---------------------------------------------
     # mode: template  - single & multi  
     #       intrusive - single & multi $ decouple
-    # ---------------------------------------------
     ctrl, mode, tpl = codegen(mainpyfile, args, command)
     print('[     0s]    INFO uptune.on: %s running with %s mode; %s' % 
               (str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
                str(mode), 'using template: ' + str(tpl)))
-
     if mode == "single":  
-        best_cfg = ctrl.main(template=tpl)
+        ctrl.main(template=tpl)
     elif mode == "multi": 
-        best_cfg = ctrl.multirun(template=tpl)
+        ctrl.multirun(template=tpl)
     elif mode == "decouple": 
-        best_cfg = ctrl.decouple()
-    print(best_cfg)
+        ctrl.decouple()
 
 
 if __name__ == '__main__':
-    from uptune import on
-    on.main()
+    main()
     
     

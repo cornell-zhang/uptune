@@ -4,7 +4,7 @@ from builtins import object
 # from uptune.template.pubsub import subscriber
 from uptune.add import constraint
 from uptune.template.access import request, retrieve
-from uptune.utils.codegen import random_name, TPL_INT, TPL_ENUM, TPL_FLOAT
+from uptune.src.codegen import random_name, TPL_INT, TPL_ENUM, TPL_FLOAT
 
 
 class MetaInstanceRegistry(type):

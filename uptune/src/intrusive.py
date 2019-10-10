@@ -9,7 +9,7 @@ from uptune.api import ParallelTuning, RunProgram
 from uptune.template.pipeline import device, distribute
 # from uptune.template.pubsub import publisher
 from uptune.opentuner.resultsdb.models import Result
-from uptune.utils.multistage import score, multirun
+from uptune.src.multistage import score, multirun
 
 log = logging.getLogger(__name__)
 
@@ -369,12 +369,12 @@ def run_builder(cmd, tpl, mode, timeout):
         sys.exit("decouple mode invalid in template tuning")
 
     if mode == "single": 
-        from uptune.utils.singlestage import single_run_builder 
+        from uptune.src.singlestage import single_run_builder 
         return single_run_builder(cmd, timeout)
 
     # template / intrusive 
     elif mode == "multi":
-        from uptune.utils.multistage import multi_run_builder 
+        from uptune.src.multistage import multi_run_builder 
         return multi_run_builder(cmd, timeout)
 
     # intrusive tuning
@@ -399,9 +399,9 @@ def decouple_run_builder(cmd, timeout):
         # run the executable script with time limit
         result = self.call_program(cmd, limit=timeout)
         if result['returncode'] != 0: 
-            log.warning("process collapsed with error on \
-                        node %d, return inf", self.index)
-            print(result['stderr'])
+            log.warning("process collapsed with error on" + \
+                        "node %d, return inf. error msg: %s", 
+                        self.index, result['stderr'].decode('utf-8'))
             self.end_run()
             return float('inf')
 

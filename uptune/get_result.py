@@ -2,7 +2,8 @@
 import os, functools, json, sys 
 import xml.etree.ElementTree
 from uptune.template import types
-from uptune.add import constraint
+from uptune.add import constraint, features
+
 
 def save(objective='min'):
     def decorator(function):
@@ -112,7 +113,17 @@ def vhls(filename, target=None):
         assert target in features.keys(), \
         "target not in feature list"
         return features[target] 
-
     return features
+
+
+def quartus(design, path, target=None):
+    """
+    extract data from Quartus post-implementation rpt 
+    """
+    featVec = features.getQuartus(design,  path)
+    if target: # return sepcifc feature
+        return featVec[target]
+    else: # return feature vecture
+        return featVec
 
 

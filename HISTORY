@@ -1,4 +1,4 @@
-# UpTune, Copyright Shawn Xiang (sx@cornell.edu), 2018-2019
+# UpTune, Copyright Shaojie Xiang (sx233@cornell.edu), 2018-2019
 # See the LICENSE file for copyright information.
 
 ### TODO
@@ -6,6 +6,11 @@
   * support comment-out syntax in complement for TuneBool 
   * support automatic deployment to local/aws/gcp
   * support autotuning with inter-variable constraint  
+
+### 2019-11-05 
+  * added baysien net structure recovery for causal learning 
+  * added c++ template for building lower level intrinscs 
+  * added support for importing history data
 
 ### 2019-10-10 
   * fixed the sqlalchemy cfg generation issue

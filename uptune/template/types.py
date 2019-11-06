@@ -10,19 +10,16 @@ from uptune.src.codegen import random_name, TPL_INT, TPL_ENUM, TPL_FLOAT
 class MetaInstanceRegistry(type):
     """Metaclass providing an instance registry """
 
-
     def __init__(cls, name, bases, attrs):
         """ create weakref for instance registry """
         super(MetaInstanceRegistry, cls).__init__(name, bases, attrs)
         cls._instances = list()
-
 
     def __call__(cls, *args, **kwargs):
         """ create instance (calls __init__ and __new__ methods) """
         inst = super(MetaInstanceRegistry, cls).__call__(*args, **kwargs)
         cls._instances.append(inst)
         return inst
-
 
     def _get_instances(cls, recursive=False):
         """
@@ -35,7 +32,6 @@ class MetaInstanceRegistry(type):
                 instances += Child._get_instances(recursive=recursive)
         return list(set(instances))
 
-
     def _remove_instance(cls, instance):
         """ remove instance recursively """
         if instance in cls._get_instances():
@@ -43,10 +39,8 @@ class MetaInstanceRegistry(type):
         for Child in cls.__subclasses__():
             Child._remove_instance(instance)
 
-
 class Registry(metaclass=MetaInstanceRegistry):
     pass
-
 
 class TuneBase(Registry):
     """ Base class for Tune Class """
@@ -59,7 +53,6 @@ class TuneBase(Registry):
         self.args   = None
         self.driver = None
         self.node   = None
-
 
     @property 
     def val(self):
@@ -136,13 +129,11 @@ class TuneBase(Registry):
             ptype, key, scope = TuneBase.params[TuneBase.count]
             return TuneBase.proposal[key]
         
-
     def set_driver(self, driver):
         """
         link obj value to its driver for cfg assignment 
         """
         self.driver = driver
-
 
     def set_node(self, node):
         """

@@ -1,9 +1,9 @@
 #!/usr/bin/env python
+import uptune as ut
 import os, functools, json, sys 
 import xml.etree.ElementTree
 from uptune.template import types
 from uptune.add import constraint, features
-
 
 def save(objective='min'):
     def decorator(function):
@@ -13,7 +13,6 @@ def save(objective='min'):
             return target(res, objective)
         return run
     return decorator
-
 
 def target(val, objective='min'):
     """ 
@@ -126,4 +125,30 @@ def quartus(design, path, target=None):
     else: # return feature vecture
         return featVec
 
+def insert(fname, value):
+    if not os.path.isfile(fname):
+        json.dump({}, open(fname, 'w'))
+
+    with open(fname, 'r+') as fp:
+        value_deck = json.load(fp)
+        fp.seek(0)
+        fp.truncate()
+        value_deck.update(value)
+        json.dump(value_deck, fp)
+
+def feature(val, name):
+    # resgiter and save feture
+    if os.getenv("ANALYSIS"):
+        assert name not in ut.mapping.keys(), \
+               "invalid name for registeration" 
+        assert name not in types.TuneBase.names, \
+               "invalid name for registeration" 
+        constraint.register(name, val)
+        # ut.__getattr__(name) = val
+        insert('covars.json', {name : val})
+
+    else: # dump result as feedback
+        assert os.path.isfile('covars.json'), \
+               "cannot find covars.json" 
+        insert('covars.json', {name : val})
 

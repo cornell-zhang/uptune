@@ -32,6 +32,7 @@ all_by_module = {
         "save",
         "target",
         "interm",
+        "feature",
         "vhls",
         "quartus"
     ],

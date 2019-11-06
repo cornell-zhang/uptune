@@ -1,6 +1,10 @@
 from future.utils import with_metaclass
 from multiprocessing.pool import ThreadPool
 from datetime import datetime
+from collections import OrderedDict
+
+import pandas as pd
+import numpy as np
 import abc, argparse, json, os, ray, logging
 import threading, time, subprocess, copy, sys
 
@@ -13,6 +17,7 @@ from uptune.opentuner.search.manipulator import (
     IntegerParameter, EnumParameter, PowerOfTwoParameter, 
     LogIntegerParameter, BooleanParameter, FloatParameter 
 )
+from uptune.plugins.causaldiscovery import notears
 from uptune.globaldb.globalmodels import *
 from uptune.opentuner.measurement.interface import (
     goodwait, goodkillpg, preexec_setpgid_setrlimit
@@ -106,7 +111,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             os.system('rm -f tune.zip')
 
         # clean and move to __tmp__
-        os.system('rm -f feats.json params.json default.json')
+        os.system('rm -f feats.json covars.json params.json default.json')
         os.chdir('__tmp__')
 
         # init ray cluster 
@@ -150,7 +155,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         self._glbsession[stage].add(g)
         self._glbsession[stage].flush()
         self._glbsession[stage].commit()
-  
+   
   
     def synchronize(self, stage, api, node, epoch):
         """ 
@@ -174,6 +179,8 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 manipulator.add_parameter(IntegerParameter(pname, prange[0], prange[1]))
             if ptype == "EnumParameter": 
                 manipulator.add_parameter(EnumParameter(pname, prange))
+                self._mapping[pname] = dict([(y,x+1) for x,y \
+                                            in enumerate(sorted(set(prange)))])
             if ptype == "FloatParameter": 
                 manipulator.add_parameter(FloatParameter(pname, prange[0], prange[1]))
             if ptype == "LogIntegerParameter": 
@@ -324,6 +331,40 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         if average < threshold: return True 
         else: return False
   
+    def resume(self):
+        """
+        import history data from local archive.csv
+        """
+        # recover the decoded pattern
+        arch_path = '../archive.csv'
+        if os.path.isfile(arch_path):
+            log.info('found archive.csv. start recovering') 
+            data = pd.read_csv(arch_path)
+            # delete if not matching 
+            if not self._params[0][1][1] in data.columns:
+                 log.info('archive mismatch. delete archive') 
+                 os.system('rm ' + arch_path)
+                 return False
+            columns = data.columns[2:-1]
+            for col in columns:
+                if col in self._mapping:
+                    cands = [item[-1] for item in self._params[0] if item[1] == col][0]
+                    mapping = dict([(i+1, cands[i]) for i in range(len(cands))])
+                    data[col].replace(mapping, inplace=True)
+
+            def digit(x):
+               try: return int(x) if not "." in x else float(x)
+               except: return x
+            # save datas into global database
+            for d in data.values:
+                d = d[2:-1] # remove index / stamp
+                try: qor = float(d[-1])
+                except: continue 
+                cfg = dict([(columns[i], digit(d[i])) 
+                               for i in range(len(self._params[0]))])
+                self.global_report(0, 0, self._apis[0], 0, 
+                                   cfg, 'seed', qor)
+            return len(data.values) - 1
   
     def prune(self, api, stage, desired_result):
         """ 
@@ -337,7 +378,6 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 else: return False 
             return True 
         return False
-  
   
     def main(self, template=False):
         """
@@ -353,14 +393,15 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         # user specified training data + models 
         self._models = self.training(self.args.learning_models) 
   
+        prev = self.resume()
         start_time = time.time() 
         for epoch in range(self._limit):
             drs, cfgs = list(), list()
             for api in self._apis:
-                try: desired_result = api.get_next_desired_result()
-                except: desired_result = None
-                if desired_result is None:
-                    continue
+                desired_result = None
+                while desired_result is None:
+                    try: desired_result = api.get_next_desired_result()
+                    except: desired_result = None
   
                 # prune and report back to opentuner database 
                 while self.prune(api, 0, desired_result) == False:
@@ -375,7 +416,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             # assert and run in parallel with ray remote
             truncate = lambda x: x + "..." if len(x) > 75 else x
             assert len(cfgs) == self._parallel, "All available cfgs have been explored"
-            log.info('running on %d nodes. global best: %f, best cfg %s', 
+            log.info('running on %d nodes. global best: %2f, best cfg %s', 
                      self._parallel,
                      self._best[0] if self._best else float('inf'),
                      truncate(str(self._cfg)) if self.args.cfg else 'saved')
@@ -394,23 +435,46 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
 
             qors = ray.get(objects)
             results = [Result(time=item[-1]) for item in qors]
+            covars  = [item[-2] for item in qors]
   
-            for api, dr, result in zip(self._apis, drs, results):
+            elapsed_time = time.time() - start_time
+            arch_path = "../archive.csv"
+            base = epoch * self._parallel 
+            keys = [item[1] for item in self._params[0]]
+            encode = lambda key, val: self._mapping[key][val] if key in self._mapping else val
+            for api, dr, covar, result in zip(self._apis, drs, covars, results):
                 api.report_result(dr, result)
                 self.global_report(0, epoch, api,
                                    self._apis.index(api), 
                                    dr.configuration.data, 
                                    dr.requestor,
                                    result.time)
+                # save res for causal dicovery update
+                index = base + drs.index(dr)
+                vals = OrderedDict([(key, encode(key, dr.configuration.data[key])) for key in keys]) 
+                # check whether prev result exist
+                if prev: index = index + prev + 1
+                is_best = 1 if result.time == self._best[0] else 0
+                df = pd.DataFrame({"time" : elapsed_time, **vals, **covar, 
+                                   "qor" : result.time, "is_best" : is_best}, 
+                                   columns=["time", *keys, *covar.keys(), "qor", "is_best"],
+                                   index=[index])
+                header = ["time", *keys, *covar.keys(), "qor", "is_best"]
+                df.to_csv(arch_path, mode='a', 
+                          header=False if index > 0 else header)
   
             for api in self._apis: # sync across nodes
                 self.synchronize(0, api, self._apis.index(api), epoch)
 
+            # update causal baysien graph 
+            # encode enum params into integers
+            if epoch % 10 == 0:
+                data = pd.read_csv('../archive.csv')
+                print(data)
+                data = (data-data.mean())/data.std()
+                print(notears(data.values[:, 2:-1]))
+
             # time check and plot diagram
-            elapsed_time = time.time() - start_time
-            self._archive.append([elapsed_time, self._cfg, self._best[0]])
-            with open('../archive.json', 'w') as fp:
-                json.dump(self._archive, fp)
             if elapsed_time > float(self.args.timeout): 
                 log.info('%s runtime exceeds timeout %ds. global_best is %f', 
                              str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
@@ -423,10 +487,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                      str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
                      self._best[0] if self._best else float('inf'))
       
-        # save best cfg into json 
-        with open('../uptune.json', 'w') as f:
-            json.dump(self._cfg, f)
-        log.info('%s tuning complete. best cfg save in uptune.json', 
+        log.info('%s tuning complete. best cfg save in archive.csv', 
                      str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         return self._cfg
 
@@ -438,7 +499,6 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         """ set actor cls from builder and tmpl """
         self.cls = actor
 
-
     def create_instances(self):
         """ create single-stage api controller, ray actors and ML model instances"""
         self._actors = [self.cls.remote(_, 0, self.args) 
@@ -446,7 +506,6 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         self._apis = [self.create_tuning(x, 0, self.create_params()) 
                           for x in range(self._parallel)]
         self._models = self.training(self.args.learning_models) 
-
 
     def finish_tuning(self):
         """ return best cfg """
@@ -456,7 +515,6 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             except: pass
         return best_cfgs
         
-
     def generate_dr(self): 
         """ singe-stage generate desired result """
         drs, idxs = list(), list()
@@ -476,7 +534,6 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         assert len(drs) == self._parallel, \
                "All available cfgs have been explored"
         return drs, idxs 
-
 
     def rpt_and_sync(self, epoch, drs, results, mapping=None, stage=0):
         """ report and synchronize result """
@@ -499,7 +556,6 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         for api in self._apis:
             self.synchronize(stage, api, 
                              self._apis.index(api), epoch)
-
 
 class RunProgram(object):
     """

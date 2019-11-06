@@ -18,7 +18,7 @@ class Controller(ParallelTuning):
 
 def single_run_builder(cmd, timeout):
     """
-    build ray run() with subprocess pkg
+    build ray run() with subprocess
     """
     entry = cmd.split()[0]
     if re.search(r'.*?\.py', entry):
@@ -50,10 +50,19 @@ def single_run_builder(cmd, timeout):
                    'res-0.json not found in current path'
             with open('res-0.json', 'r') as fp:
                 index, res, trend = json.load(fp)[-1]
+                assert isinstance(res, (int, float)), \
+                    'feedback function should return a real value'
             fp.close()
             if trend == 'max':
                res = (-1.0) * res
-            pair = [index, res]
+
+            # collect features (covariates)
+            if os.path.isfile('covars.json'):
+                f = open('covars.json', 'r')
+                covars = json.load(f)
+                f.close()
+            else: covars = dict()
+            pair = [index, covars, res]
 
         except Exception as e:
             log.warning("parse data failure on ndoe %d, \
@@ -61,13 +70,8 @@ def single_run_builder(cmd, timeout):
             self.end_run()
             return float('inf')
 
-        index, qor = pair
-        assert isinstance(qor, (int, float)), \
-            'feedback function should return a real value'
         self.end_run()
         return pair
 
     return run
-
-        
 

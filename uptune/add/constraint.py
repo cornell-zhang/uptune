@@ -20,18 +20,19 @@ class VarNode(Symbol):
         super(VarNode, self).__init__()
         self.name  = name
         self.lower = lower
-        self.upper = lower
+        self.upper = upper
 
-def register(name, lower, upper):
+def register(name, lower, upper=None):
     """ 
     register node with constraint
     """
     assert isinstance(lower, (float, int, VarNode)), \
            "invalid lower bound type"
-    assert isinstance(upper, (float, int, VarNode)), \
-           "invalid upper bound type"
+    if upper: # not a fixed value
+        assert isinstance(upper, (float, int, VarNode)), \
+               "invalid upper bound type"
+    else: upper = lower
     shared.VarNode.nodes[name] = VarNode(name, lower, upper) 
-           
 
 def constraint(*args):
     """

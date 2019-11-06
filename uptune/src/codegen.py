@@ -1,3 +1,4 @@
+import pandas as pd
 import re, os, sys, json, copy, random, ray, uptune, logging, subprocess
 from uptune.api import ParallelTuning, RunProgram
 from uptune.src.intrusive import mpisystem
@@ -25,12 +26,19 @@ OBJ   = r'(\S+)\s*=\s*TuneRes\((?:(max)|(min))\)'  # capture the obejctive
 
 # unique name and result list 
 unique, objective = set(), set()
-
+if os.path.isfile("archive.csv"):
+    names = pd.read_csv("archive.csv").columns[2:-1] 
+else: names = set()
+name_counter = -1
 
 def random_name(unique, name):
     """
     generate a random name for tuning variable 
     """
+    if len(names) > 0: # used pre-generated names
+       global name_counter
+       name_counter += 1
+       return names[name_counter]
     if name: # check dup
         assert name not in unique, "duplicate name: " + name
         unique.add(name)

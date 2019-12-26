@@ -17,7 +17,6 @@ class Namespace:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 
-
 class Uptune(cmd.Cmd):
     """
     command line interface for configuration 
@@ -43,7 +42,6 @@ class Uptune(cmd.Cmd):
         print("Quitting.")
         raise SystemExit
 
-
 def interactive():
     """ 
     interactive command line mode 
@@ -68,14 +66,12 @@ def interactive():
     shell = Uptune()
     shell.cmdloop("[INFO] uptune start running " + ' '.join(sys.argv))
 
-
 def get_val(string, val):
     """
     return env or default for auto-tuning meta-params
     """
     try: return os.environ[string]
     except: return val
-    
 
 def main():
     """ 

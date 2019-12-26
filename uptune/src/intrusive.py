@@ -25,13 +25,10 @@ class MpiController(ParallelTuning):
         super(MpiController, self).__init__(cls, args, *pargs, **kwargs)
         self.device_pool = list()
 
-
     def analysis(self, cmd):
         """ run the default program and extract cfg """
         # analysis finished in built-in api mode
-        if os.getenv("ANALYSIS"):
-            assert os.path.isfile('params.json'), \
-                   "not found params"
+        if os.path.isfile('params.json'):
             return
 
         entry = cmd.split()[0]
@@ -363,11 +360,9 @@ class MpiController(ParallelTuning):
                 fp.close()
                 bucket.upload_file(fname, fname, 
                                    ExtraArgs={'ACL':'public-read-write'})
-            
 
 MpiController.multirun = multirun
 MpiController.score = score
-
 
 def run_builder(cmd, tpl, mode, timeout):
     """ return different run() based on mode"""

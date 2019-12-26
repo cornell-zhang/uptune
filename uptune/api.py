@@ -50,9 +50,11 @@ argparser.add_argument('--cpu-num', type=int, default=1,
 
 log = logging.getLogger(__name__)
 
-def init(): # reset uptune env variables 
+def init(apply_best=False): # reset uptune env variables 
     if not os.getenv("EZTUNING"):
         os.environ["UPTUNE"] = "True"
+        if apply_best: # apply best cfg
+            os.environ["BEST"] = "True"
 
 # run with the best 
 def get_best():

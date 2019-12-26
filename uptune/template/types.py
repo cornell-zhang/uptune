@@ -63,7 +63,7 @@ class TuneBase(Registry):
         return default if flag is off 
         call controller for proposal cfg with flag on
         """
-        if os.getenv("ANALYSIS"): 
+        if os.getenv("ANALYSIS") or os.getenv("UPTUNE"): 
             # analyze params for enum, bool and perm
             if isinstance(self.scope, list) or callable(self.scope): 
                 if self.value == self.scope: tpl = TPL_PERM

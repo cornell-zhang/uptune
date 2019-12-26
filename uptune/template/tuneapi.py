@@ -1,10 +1,11 @@
 #/usr/bin/env python
-import os, sys, psutil
+import os, sys, psutil, subprocess
 import uptune as ut
 from uptune import config
 from uptune.template import types 
 from uptune.tuners import bandit
 from inspect import signature as sig
+import tvm
 
 def start():
     """Restarts the current program, with file objects and descriptors
@@ -21,10 +22,14 @@ def start():
         # invoke uptune 
         python = sys.executable
         args = sys.argv
+        args.insert(0, sys.argv[0])
         for k, v in ut.config.items():
             args.append("--" + k)
             args.append(str(v))
-        os.execl(python, "uptune", *args)
+        p = subprocess.Popen("which uptune", 
+            stdout=subprocess.PIPE, shell=True)
+        exe = p.communicate()[0].rstrip().decode("utf-8")
+        os.execv(exe, args)
     else: # tuning barrier
         sys.exit(0)
 
@@ -55,7 +60,7 @@ def tune(default=None,
         assert name not in ut.mapping.keys(), \
                "invalid name for registeration" 
 
-    if isinstance(tuning_range, list):
+    if isinstance(tuning_range, (list, tvm.container.Array)):
         assert len(tuning_range) > 0, \
                "must specify the tuning range as list"
         assert default in tuning_range, \

@@ -25,7 +25,7 @@ def target(val, objective='min', tuner=None):
            "the objective can be either 'min' or 'max'"
 
     # generate params in analysis mode
-    if os.getenv("ANALYSIS"):
+    if os.getenv("ANALYSIS") or os.getenv("UPTUNE"):
         update('default.json', [val, objective])
         if not os.path.isfile('template.tpl'):
             update('params.json', types.TuneBase.params)

@@ -28,6 +28,12 @@ class MpiController(ParallelTuning):
 
     def analysis(self, cmd):
         """ run the default program and extract cfg """
+        # analysis finished in built-in api mode
+        if os.getenv("ANALYSIS"):
+            assert os.path.isfile('params.json'), \
+                   "not found params"
+            return
+
         entry = cmd.split()[0]
         if re.search(r'.*?\.py', entry):
             cmd = 'python ' + cmd
@@ -466,7 +472,8 @@ def mpisystem(args, command):
         def parse(self):
             raise RuntimeError('parse() not implemented')
 
-    # analyze tuning mode
+    # recover or analyze
+    print('[     0s]    INFO uptune.src: program profiling started')
     pt.analysis(command)
     with open('params.json', 'r') as fp:
        stage = len(json.load(fp)) 
@@ -481,7 +488,7 @@ def mpisystem(args, command):
     # init controller 
     pt.init_dbs(stage)
     tpl = True if os.path.isfile('template.tpl') else False
-    if not tpl: os.mkdir('__tmp__/__cfg__')
+    if not tpl: os.mkdir('__uptune__/__cfg__')
 
     # set the runtime limit for cmd
     cmd_timeout = args.runtime_limit

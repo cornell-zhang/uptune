@@ -15,7 +15,8 @@ from uptune.opentuner.resultsdb.models import Result
 from uptune.opentuner.search.manipulator import ConfigurationManipulator
 from uptune.opentuner.search.manipulator import (
     IntegerParameter, EnumParameter, PowerOfTwoParameter, 
-    LogIntegerParameter, BooleanParameter, FloatParameter 
+    LogIntegerParameter, BooleanParameter, FloatParameter,
+    PermutationParameter 
 )
 from uptune.plugins.causaldiscovery import notears
 from uptune.globaldb.globalmodels import *
@@ -24,7 +25,7 @@ from uptune.opentuner.measurement.interface import (
 )
 
 argparser = argparse.ArgumentParser(add_help=False)
-argparser.add_argument('--timeout', type=int, default=36000,
+argparser.add_argument('--timeout', type=int, default=72000,
                        help="auto-tuning timeout in seconds")
 argparser.add_argument('--parallel-factor', '-pf', type=int, default=2,
                        help="number of processes spawned by Parallel Python")
@@ -35,7 +36,7 @@ argparser.add_argument('--runtime-limit', '-rt', type=int, default=7200,
 argparser.add_argument('--learning-models', '-lm', action="append", default=[],
                        help="single or ensemble of learning models for space pruning")
 argparser.add_argument('--training-data', '-td', type=str, default='',
-                       help="path to training data (import atumatically with extension detection)")
+                       help="path to training data (support csv / txt)")
 argparser.add_argument('--offline', action='store_true',
                        help="enable re-training for multi-stage")
 argparser.add_argument('--aws', action='store_true', default=False,
@@ -48,6 +49,19 @@ argparser.add_argument('--cpu-num', type=int, default=1,
                        help="max number of cpu for each task")
 
 log = logging.getLogger(__name__)
+
+def init(): # reset uptune env variables 
+    if not os.getenv("EZTUNING"):
+        os.environ["UPTUNE"] = "True"
+
+# run with the best 
+def get_best():
+    assert os.path.isfile("__uptune__/best.json"), \
+           "best cfg does not exsit"
+    with open("__uptune__/best.json", "r") as fp:
+        cfg, res = json.load(fp)
+    fp.close()
+    return cfg, res
 
 class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
     """
@@ -67,6 +81,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         self._limit      = args.test_limit 
         self._best       = list()
         self._cfg        = None
+        self._prev       = False                   # whether recovering from history 
         self._valid      = False                   # whether pruning is enabled
         self._ratio      = 0.3                     # pruning score percentage threshold
         self._mapping    = dict()                  # mappin from Enum to Int
@@ -86,37 +101,37 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         set the process/mode to run: process nunber = floor (pf / node)
         connect to the global db for mab and global results
         """
-        path = '__tmp__/uptune.db'
+        path = '__uptune__/uptune.db'
         if not os.path.isdir(path):
             os.makedirs(path, exist_ok=True)
         if self.args.database == None:
-            self.args.database = 'sqlite:///__tmp__/global-'
+            self.args.database = 'sqlite:///__uptune__/global-'
   
   
     def before_run(self, copy=False):
         """ 
-        create __tmp__ folder before run
+        create __uptune__ folder before run
         """
         with open(self._json) as f:
             self._params = json.load(f)
         f.close()
   
         if copy == True:
-            exclude = ' -x __tmp__/\* default.json feats.json'
+            exclude = ' -x __uptune__/\* default.json feats.json'
             os.system('zip -r tune.zip *' + exclude + '> /dev/null')
             for idx in range(self._parallel):
-                os.system('mkdir __tmp__/' + str(idx) + ' > /dev/null')
-                os.system('unzip -o tune.zip -d __tmp__/' + \
+                os.system('mkdir __uptune__/' + str(idx) + ' > /dev/null')
+                os.system('unzip -o tune.zip -d __uptune__/' + \
                           str(idx) + ' > /dev/null')
             os.system('rm -f tune.zip')
 
-        # clean and move to __tmp__
+        # clean and move to __uptune__
         os.system('rm -f feats.json covars.json params.json default.json')
-        os.chdir('__tmp__')
+        os.chdir('__uptune__')
 
         # init ray cluster 
         # ray.init(redis_address="localhost:6379")
-        ray.init()
+        ray.init(logging_level=logging.FATAL)
   
   
     def create_tuning(self, index, stage, manipulator):
@@ -124,11 +139,12 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         args.database = "sqlite:///" + os.path.join('uptune.db', 
                                                     str(index) + \
                                                     '-' + str(stage) + '.db')
+        # keep meas-interface for tuners
         interface = MeasurementInterface(args=args,
-                                         manipulator=manipulator,
-                                         project_name='tuning',
-                                         program_name='tuning',
-                                         program_version='0.1')
+                        manipulator=manipulator,
+                        project_name='tuning',
+                        program_name='tuning',
+                        program_version='0.1')
         api = TuningRunManager(interface, args)
         return api
   
@@ -139,7 +155,11 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         """
         if result < self._best[stage] or self._best[stage] == None:
             self._best[stage] = result
-            if stage == 0: self._cfg = cfg
+            if stage == 0: # save best cfg
+                self._cfg = cfg
+                with open("best.json", "w") as fp:
+                    json.dump([cfg, result], fp)
+                fp.close()
             flag = True
   
         api.manipulator.normalize(cfg)
@@ -177,18 +197,21 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             ptype, pname, prange = item
             if ptype == "IntegerParameter": 
                 manipulator.add_parameter(IntegerParameter(pname, prange[0], prange[1]))
-            if ptype == "EnumParameter": 
+            elif ptype == "EnumParameter": 
                 manipulator.add_parameter(EnumParameter(pname, prange))
                 self._mapping[pname] = dict([(y,x+1) for x,y \
                                             in enumerate(sorted(set(prange)))])
-            if ptype == "FloatParameter": 
+            elif ptype == "FloatParameter": 
                 manipulator.add_parameter(FloatParameter(pname, prange[0], prange[1]))
-            if ptype == "LogIntegerParameter": 
+            elif ptype == "LogIntegerParameter": 
                 manipulator.add_parameter(LogIntegerParameter(pname, prange[0], prange[1]))
-            if ptype == "PowerOfTwoParameter": 
+            elif ptype == "PowerOfTwoParameter": 
                 manipulator.add_parameter(PowerOfTwoParameter(pname, prange[0], prange[1]))
-            if ptype == "BooleanParameter": 
+            elif ptype == "BooleanParameter": 
                 manipulator.add_parameter(BooleanParameter(pname))
+            elif ptype == "PermutationParameter": 
+                manipulator.add_parameter(PermutationParameter(pname, prange))
+            else: assert False, "unrecognized type " + ptype
         return manipulator
         
   
@@ -341,7 +364,8 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             log.info('found archive.csv. start recovering') 
             data = pd.read_csv(arch_path)
             # delete if not matching 
-            if not self._params[0][1][1] in data.columns:
+            cols = [_[1] for _ in self._params[0]]
+            if not set(cols).issubset(set(data.columns)):
                  log.info('archive mismatch. delete archive') 
                  os.system('rm ' + arch_path)
                  return False
@@ -352,18 +376,23 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                     mapping = dict([(i+1, cands[i]) for i in range(len(cands))])
                     data[col].replace(mapping, inplace=True)
 
-            def digit(x):
+            def convert(x):
                try: return int(x) if not "." in x else float(x)
-               except: return x
+               except: # non-numerical values 
+                   try: # convert a perm list
+                       x = x.strip('][').split(', ')
+                       return [int(_) if not "." in _ else float(_) for _ in x]
+                   except: return x
             # save datas into global database
             for d in data.values:
                 d = d[2:-1] # remove index / stamp
                 try: qor = float(d[-1])
                 except: continue 
-                cfg = dict([(columns[i], digit(d[i])) 
+                cfg = dict([(columns[i], convert(d[i])) 
                                for i in range(len(self._params[0]))])
                 self.global_report(0, 0, self._apis[0], 0, 
                                    cfg, 'seed', qor)
+            self._prev = len(data.values) - 1
             return len(data.values) - 1
   
     def prune(self, api, stage, desired_result):
@@ -378,6 +407,14 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 else: return False 
             return True 
         return False
+
+    def encode(self, key, val):
+        """ encode list or string into numbers"""
+        if key in self._mapping: # return string encoding
+            return self._mapping[key][val] 
+        elif isinstance(val, list):
+            return [val] 
+        return val
   
     def main(self, template=False):
         """
@@ -399,6 +436,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             drs, cfgs = list(), list()
             for api in self._apis:
                 desired_result = None
+
                 while desired_result is None:
                     try: desired_result = api.get_next_desired_result()
                     except: desired_result = None
@@ -414,12 +452,11 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 cfgs.append(desired_result.configuration.data)
             
             # assert and run in parallel with ray remote
-            truncate = lambda x: x + "..." if len(x) > 75 else x
+            # truncate = lambda x: x + "..." if len(x) > 75 else x
             assert len(cfgs) == self._parallel, "All available cfgs have been explored"
-            log.info('running on %d nodes. global best: %2f, best cfg %s', 
-                     self._parallel,
-                     self._best[0] if self._best else float('inf'),
-                     truncate(str(self._cfg)) if self.args.cfg else 'saved')
+            log.info('global best: %2f from %d nodes', 
+                     self._best[0] if self._best else float('inf'), self._parallel)
+                     # truncate(str(self._cfg)) if self.args.cfg else 'saved')
 
             if not template: # dtribute drs across nodes
                 self.publish(drs, stage=0)
@@ -441,7 +478,6 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             arch_path = "../archive.csv"
             base = epoch * self._parallel 
             keys = [item[1] for item in self._params[0]]
-            encode = lambda key, val: self._mapping[key][val] if key in self._mapping else val
             for api, dr, covar, result in zip(self._apis, drs, covars, results):
                 api.report_result(dr, result)
                 self.global_report(0, epoch, api,
@@ -451,9 +487,9 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                                    result.time)
                 # save res for causal dicovery update
                 index = base + drs.index(dr)
-                vals = OrderedDict([(key, encode(key, dr.configuration.data[key])) for key in keys]) 
+                vals = OrderedDict([(key, self.encode(key, dr.configuration.data[key])) for key in keys]) 
                 # check whether prev result exist
-                if prev: index = index + prev + 1
+                if self._prev: index = index + self._prev + 1
                 is_best = 1 if result.time == self._best[0] else 0
                 df = pd.DataFrame({"time" : elapsed_time, **vals, **covar, 
                                    "qor" : result.time, "is_best" : is_best}, 
@@ -467,12 +503,10 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 self.synchronize(0, api, self._apis.index(api), epoch)
 
             # update causal baysien graph 
-            # encode enum params into integers
-            if epoch % 10 == 0:
-                data = pd.read_csv('../archive.csv')
-                print(data)
-                data = (data-data.mean())/data.std()
-                print(notears(data.values[:, 2:-1]))
+            # if epoch % 10 == 0:
+            #     data = pd.read_csv('../archive.csv')
+            #     data = (data-data.mean())/data.std()
+            #     print(notears(data.values[:, 2:-1]))
 
             # time check and plot diagram
             if elapsed_time > float(self.args.timeout): 
@@ -483,12 +517,10 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
   
         for api in self._apis:
             api.finish()
+
         log.info('%s tuning complete. global_best is %f', 
                      str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
                      self._best[0] if self._best else float('inf'))
-      
-        log.info('%s tuning complete. best cfg save in archive.csv', 
-                     str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         return self._cfg
 
 

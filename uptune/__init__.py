@@ -20,8 +20,8 @@ from . import api
 from . import opentuner
 from .add import constraint
 
-
 all_by_module = {
+    "uptune.api": ["init", "get_best"],
     "uptune.add.constraint": [
         "constraint",
     ],
@@ -43,6 +43,14 @@ all_by_module = {
     ],
 }
 
+default_settings = {
+    "test-limit"      : 10,
+    "runtime-limit"   : 7200,
+    "parallel-factor" : 2,
+    "learning-model"  : "xgbregressor",
+    "gpu-num"         : 1,
+    "cpu-num"         : 1,
+}
 
 # objs to module name mapping
 object_origins = {}
@@ -50,12 +58,12 @@ for module, items in all_by_module.items():
     for item in items:
         object_origins[item] = module
 
-
 class module(ModuleType):
     """ import objects from the modules."""
     def __init__(self, name):
         super(module, self).__init__(name)
         self.mapping = object_origins
+        self.config = default_settings
 
     def __getattr__(self, name):
         if name in object_origins:

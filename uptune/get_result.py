@@ -14,7 +14,7 @@ def save(objective='min'):
         return run
     return decorator
 
-def target(val, objective='min'):
+def target(val, objective='min', tuner=None):
     """ 
     return feedback for analysis and validation 
     results in sub-folder/res-stage.json returned by raylet
@@ -120,6 +120,12 @@ def quartus(design, path, target=None):
     extract data from Quartus post-implementation rpt 
     """
     featVec = features.getQuartus(design,  path)
+    # register the features in covars
+    for k, v in featVec.items():
+        if v == 'None': v = 0
+        try: v = int(v)
+        except: v = float(v)
+        feature(v, k) 
     if target: # return sepcifc feature
         return featVec[target]
     else: # return feature vecture

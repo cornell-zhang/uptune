@@ -1,12 +1,38 @@
 #/usr/bin/env python
-import os, sys
+import os, sys, psutil
+import uptune as ut
+from uptune import config
 from uptune.template import types 
+from uptune.tuners import bandit
 from inspect import signature as sig
 
-def tune(default, 
-         tuning_range, 
+def start():
+    """Restarts the current program, with file objects and descriptors
+       cleanup
+    """
+    if os.getenv("UPTUNE"):
+        del os.environ["UPTUNE"]
+        try: # free handlers 
+            p = psutil.Process(os.getpid())
+            for handler in p.open_files() + p.connections():
+                os.close(handler.fd)
+        except Exception as e:
+            sys.exit("cannot free handlers from the memory")
+        # invoke uptune 
+        python = sys.executable
+        args = sys.argv
+        for k, v in ut.config.items():
+            args.append("--" + k)
+            args.append(str(v))
+        os.execl(python, "uptune", *args)
+    else: # tuning barrier
+        sys.exit(0)
+
+def tune(default=None, 
+         tuning_range=(), 
          args=None, 
-         name=None):
+         name=None, 
+         tuner=None):
     """ 
     Return TuneInt/Enum/Float instantiated obj
     Property @val will return actual value 
@@ -20,6 +46,10 @@ def tune(default,
     Return:
         value : string float or integer
     """
+    if default == None: # start tuning
+        assert tuner, "not specify tuner"
+        start(); return 
+
     if name: # checke name validity 
         import uptune as ut
         assert name not in ut.mapping.keys(), \
@@ -58,13 +88,32 @@ def tune(default,
                              tuning_range,
                              name=name).val
 
+    # create permutation or boolean param
     assert len(tuning_range) == 0 and \
-           isinstance(default, bool), \
-           "for boolean range should be ()"
-    return types.TuneBool(default, 
-                          name=name).val
+           isinstance(default, (bool, list)), \
+           "for boolean or permutation range should be ()"
+    if isinstance(default, bool):
+        return types.TuneBool(default, name=name).val
+    else: # create permutation param
+        return types.TunePermutation(default, name=name).val
 
-    
+def tune_at(default, 
+            tuning_range, 
+            path, name):
+    """
+    replace the holder for tuning non-python vars 
+    """
+    # check local file 
+    assert os.path.isfile(path), "file not exist"
+    val = tune(default, 
+               tuning_range, 
+               name=name)
+    with open(path, 'r+') as fp:
+        txt = fp.read().replace(name, val)
+        fp.seek(0)
+        fp.truncate()
+        fp.write(txt)
+
 if __name__ == "__main__":
     os.environ["EZTUNING"] = "ON"
     # os.environ["ANALYSIS"] = "ON"

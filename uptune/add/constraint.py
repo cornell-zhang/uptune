@@ -27,10 +27,10 @@ def register(name, lower, upper=None):
     register node with constraint
     """
     assert isinstance(lower, (float, int, VarNode)), \
-           "invalid lower bound type"
+           "invalid lower bound type " + str(type(lower))
     if upper: # not a fixed value
         assert isinstance(upper, (float, int, VarNode)), \
-               "invalid upper bound type"
+               "invalid upper bound type " + str(type(upper))
     else: upper = lower
     shared.VarNode.nodes[name] = VarNode(name, lower, upper) 
 

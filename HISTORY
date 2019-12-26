@@ -7,6 +7,18 @@
   * support automatic deployment to local/aws/gcp
   * support autotuning with inter-variable constraint  
 
+### 2019-12-25
+  * added permutation support & rename
+  * updated api for easy integration
+  * support extern tuner as plugin-in into autotvm (builder + runner required. also for samplers and optimizer + cost model)
+
+### 2019-12-11
+  * support deamon auto-tuning server with ray-like API
+  * replace returned value as symbolic variable
+
+### 2019-11-09 
+  * added placeholder replacement feature for tuning non-python file 
+
 ### 2019-11-05 
   * added baysien net structure recovery for causal learning 
   * added c++ template for building lower level intrinscs 

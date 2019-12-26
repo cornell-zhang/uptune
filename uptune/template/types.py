@@ -4,7 +4,10 @@ from builtins import object
 # from uptune.template.pubsub import subscriber
 from uptune.add import constraint
 from uptune.template.access import request, retrieve
-from uptune.src.codegen import random_name, TPL_INT, TPL_ENUM, TPL_FLOAT
+from uptune.src.codegen import (
+    random_name, TPL_INT, TPL_ENUM, TPL_FLOAT,
+    TPL_BOOL, TPL_PERM, TPL_LOG
+)
 
 
 class MetaInstanceRegistry(type):
@@ -60,32 +63,32 @@ class TuneBase(Registry):
         return default if flag is off 
         call controller for proposal cfg with flag on
         """
-        if not os.getenv("EZTUNING"):
-            return self.value
-        
         if os.getenv("ANALYSIS"): 
-
-            # analyze params for enum
+            # analyze params for enum, bool and perm
             if isinstance(self.scope, list) or callable(self.scope): 
-                token = copy.deepcopy(TPL_ENUM)
+                if self.value == self.scope: tpl = TPL_PERM
+                elif isinstance(self.value, bool): tpl = TPL_BOOL
+                else: tpl = TPL_ENUM
+                token = copy.deepcopy(tpl)
                 token[1] = random_name(TuneBase.names, self.name)
                 if self.args: # scope = (lambda, args)
                     self.scope = (self.scope, self.args)
                 token[2] = self.scope
                 TuneBase.params.append(token)
-
             else: # infer and register numerical op
                 lb, ub = self.scope
                 name = random_name(TuneBase.names, self.name)
                 constraint.register(name, lb, ub)
-
                 tpl = TPL_INT if isinstance(lb, int) and \
                                  isinstance(ub, int) else TPL_FLOAT
                 token = copy.deepcopy(tpl)
                 token[1] = name
                 token[2] = self.scope
                 TuneBase.params.append(token)
-    
+            return self.value
+
+        # default mode return
+        elif not os.getenv("EZTUNING"):
             return self.value
 
         else: # servers pull from queue 
@@ -190,6 +193,15 @@ class TuneBool(TuneBase):
         assert isinstance(default, bool), "default must be boolean"
 
 
+class TunePermutation(TuneBase):
+    """ 
+    class template for tuning permutation variable 
+    """
+    def __init__(self, default, name=None):
+        super(TunePermutation, self).__init__(default, default, name)
+        assert isinstance(default, list), "default must be list"
+
+
 class TuneResult(object):
     """ 
     class template for tuning result i.e. feedback 
@@ -222,8 +234,8 @@ if __name__ == '__main__':
     print(TuneBase.params)
 
     # save result
-    from uptune import feedback
-    res = feedback(factoe * 2)
+    from uptune import target
+    res = target(factoe * 2)
     print(res)
 
 

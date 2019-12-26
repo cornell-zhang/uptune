@@ -85,8 +85,8 @@ def main():
         print("usage: \"python -m uptune.on script [args] \" or \"uptune sctipt [args] \"")
         sys.exit(2)
 
-    # clean mode to rm tmp files
-    os.system('rm -rf __tmp__ default.json feats.json \
+    # clean mode to rm tmp files (keep params & covars)
+    os.system('rm -rf __uptune__ default.json feats.json \
                template.tpl res-*.json')
     if len(sys.argv) == 2 and sys.argv[1] == "clean":
         sys.exit('[     0s]    INFO uptune.on: temporary files cleaned up')
@@ -124,16 +124,15 @@ def main():
     # mode: template  - single & multi  
     #       intrusive - single & multi $ decouple
     ctrl, mode, tpl = codegen(mainpyfile, args, command)
-    print('[     0s]    INFO uptune.on: %s running with %s mode; %s' % 
-              (str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-               str(mode), 'using template: ' + str(tpl)))
+    print('[     0s]    INFO uptune.on: running with %s mode; %s' % 
+               (str(mode), 'using template: ' + str(tpl)))
     if mode == "single":  
         ctrl.main(template=tpl)
     elif mode == "multi": 
         ctrl.multirun(template=tpl)
     elif mode == "decouple": 
         ctrl.decouple()
-
+    
 if __name__ == '__main__':
     main()
     

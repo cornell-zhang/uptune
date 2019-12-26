@@ -10,6 +10,7 @@ TPL_ENUM  = ["EnumParameter", "name", []]
 TPL_FLOAT = ["FloatParameter", "name", (0, 1000)]
 TPL_LOG   = ["LogIntegerParameter", "name", (0, 1000)]
 TPL_BOOL  = ["BooleanParameter", "name", '']
+TPL_PERM  = ["PermutationParameter", "name", []]
 
 TPL_DICT  = {
     "TuneInt"   : TPL_INT,
@@ -63,9 +64,7 @@ def get_params(group, content):
     param_list = re.finditer(pattern, content)
     errmsg = "Invalid parameter declaration: %s in %s" % (group, content) 
 
-    # -------------------------------
     # for tuning variables 
-    # -------------------------------
     for item in param_list:
         origin, ptype, default, scope, array, name = item.groups()
         assert default != '', errmsg + "\n invalid default value"
@@ -96,9 +95,7 @@ def validity_check(params, origins, content, index):
         category, name, scope = params[idx]
         origin = origins[idx]
 
-        # -----------------------------
         # check the parameter validity 
-        # -----------------------------
         if category == 'FloatParameter':
             assert type(scope) == tuple, "tuple scope for TuneFloat"
             assert len(scope) == 2, "tuple (lower, upper) for TuneFloat"
@@ -114,9 +111,7 @@ def validity_check(params, origins, content, index):
             assert scope[0] < scope[1], "invalid scope range"
             assert all(isinstance(x, int) for x in scope), "only integer accepted"
 
-        # --------------------------------------
         # search the clean inceptive scope for matching
-        # --------------------------------------
         match_res, cursor = list(), -1
         for c in candidates:
 
@@ -135,9 +130,7 @@ def validity_check(params, origins, content, index):
         assert cursor > -1, \
                'parameter %s not found within the incpetive scope' % origin
 
-        # --------------------------------------
         # replace the match with jinja template 
-        # --------------------------------------
         sentence, val = match_res[0] 
         template = '${{ cfg[\'' + name +'\'] | tojson | patch }}' 
         candidates[cursor] = candidates[cursor].replace(sentence, 

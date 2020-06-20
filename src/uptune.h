@@ -1,37 +1,48 @@
-#ifndef UPTUNE_H_
-#define UPTUNE_H_
+#ifndef _UPTUNE_H_
+#define _UPTUNE_H_
 
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "logger.h"
 
-// example usage:
-// int a = uptune::tune<int>(1, std::make_tuple());
+// Example usage:
+// int a    = uptune::tune<int>(1, {1, 3});
 // string b = uptune::tune<string>("auto", {"auto", "off"});
-// float c = uptune::tune<float>(0.5, );
+// float c  = uptune::tune<float>(0.5, {});
+
 namespace uptune {
+
+const char* GetUnique();
+
+template<typename T>
+T tune(T origin, std::vector<T> space, const std::string name="") {
+    // return original value
+    if (!std::getenv("EZTUNING")) {
+      return origin;
+    }
+
+    // save scope and create objs
+    else if (std::getenv("ANALYSIS")) {
+      for (auto& v : space) {
+      }
+    }
+    return origin;
+}
 
 template<typename T>
 class tuneBase {
   public:
-    tuneBase(const std::string& name = "") 
-      : name{name}, tail{0}, head{0} {
-      if (name == "") name = GetUniqueName();
-    }
-    // disable copy (assignment) constructor
-    tuneBase(const stream&) = delete;
-    tuneBase(stream&&) = default;
-    tuneBase& operator=(const stream&) = delete;
-    tuneBase& operator=(stream&&) = default;
-    
+    tuneBase() {}
+
     // get tune instance information
     virtual const char* get_name() const = 0;
     virtual T* get_space() const = 0;
 
   private:
-    const std::string name;
-    // save all tuning vars info
-    static std::vector 
-}
+    const char* name;
+};
+
 
 } // namespace uptune
+#endif

@@ -1,5 +1,10 @@
 #!/bin/bash
-cmake .
+rm -rf build
+mkdir build
+cd build
+cmake ..
 make -j8
-cd python
+./uptune_tests
+
+cd ../python
 python setup.py develop

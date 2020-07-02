@@ -10,7 +10,7 @@ A Generic Distributed Auto-Tuning Framework.
 
 ### Installation
 
-The uptune framework has python and C++ API bindings, and we install both by default. The C++ requires cmake (>2.8), gcc (>4.8.5) and GoogleTest installed. Simply pull it back and run the install scripts, and uptune package will be installed to your local environment.
+The uptune framework has python and C++ API bindings, and we install both by default. The C++ binding requires cmake (>2.8), gcc (>4.8.5) and GoogleTest to be installed. To install uptune, simply pull it back and run the install script with the following commands:
 
 ```shell
 git clone https://github.com/cornell-zhang/uptune.git; cd uptune;
@@ -56,7 +56,7 @@ python program.py
 
 # 2. start tuning the program with 4 parallel processes 
 uptune program.py -pf 4
-python -m uptune.on program -pf 4
+python -m uptune.on program.py -pf 4
 
 # 3. run the tuning with built-in or user-defined ML models
 uptune program.py -pf 4 -lm xgbregressor

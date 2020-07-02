@@ -1,118 +1,65 @@
 # UpTune Project 
 
-A Generic Distributed Auto-Tuning Infrastructure
+![version](https://img.shields.io/badge/version-2020.06-blue?style=flat-square)
+![license](https://img.shields.io/badge/license-BSD-brightgreen?style=flat-square)
+![build](https://img.shields.io/circleci/build/github/cornell-zhang/uptune/master?style=flat-square)
+
+A Generic Distributed Auto-Tuning Framework. 
 
 ## Getting Started
 
 ### Installation
 
-Pull back the repo and install the package with `install` mode
+The uptune framework has python and C++ API bindings, and we install both by default. The C++ binding requires cmake (>2.8), gcc (>4.8.5) and GoogleTest to be installed. To install uptune, simply pull it back and run the install script with the following commands:
 
-```
-git clone https://github.com/cornell-zhang/uptune.git
-cd uptune; pip install -e . 
-```
-#### For MacOS users 
-Please install gcc8 for XGBoost
-```
-brew install gcc@8
+```shell
+git clone https://github.com/cornell-zhang/uptune.git; cd uptune;
+./install.sh 
 ```
 
 ### Quick Start 
+
+Here is a quick example to walk you through the basic usage of uptune APIs. Intel Quartus is a EDA tool that compiles RTL design into FPGA bitstream. In this example we explore through the design space of Quartus tool options to maximize the clock frequency of the generated bitstream.  
  
-Here's a quick example to tune the hyperparameters in a Multilayer Perceptron (MLP) for improved classification accuracy. Import `uptune` package and declare the tunable variables using `var = ut.tune(default, range)`, then specify the return value with `ut.target(value, objective)`
-
-```python
-import uptune as ut
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation
-
-model = Sequential([
-    # search units on integer number space
-    Dense(ut.tune(100, (50, 150)), input_shape=input_shape, activation='relu'),
-    # search dropout rate on real value space
-    Dropout(ut.tune(0.5, (0.2, 0.7))),
-    # search activation with provided enumerate list
-    Dense(1, activation=ut.tune('softmax', ['sigmoid', 'softmax']))
-    ])
-
-model.compile(loss='categorical_crossentropy',
-              optimizer=ut.tune('sgd', ['adam', 'rmsprop', 'sgd', 'adadelta']),
-              metrics=['accuracy'])
-model.fit(x_train, y_train, epochs=20, batch_size=128)
-
-# maximize classification accuracy on test dataset
-score = ut.target(model.evaluate(x_test, y_test, batch_size=128),
-                  objective='max')
-```
-Save the model and start tuning it with `uptune file.py [args for file.py] -pf 4 --timeout 36000`. UpTune will tune the model across 4 local threads until the time budget (in seconds) is exhausted. To execute the model with default values, run `python file.py [args for file]`
-
-### User Interface Details 
-
-Specify the tuning variables with either tuning APIs or non-intrusive annotation.
-
-#### Tunable Variables Declaration
-
-Call `ut.tune` API to specify the tuning range, and the tuning type (e.g. Integer, Real or Enumeration range will be inferred automatically). Notice that we do not support mixed declaration of tuning APIs and annotation approach. 
-
-```python
-import uptune as ut
-# tune integer `a` from 1 to 9, with default of 2
-# optional arg 'name' as variable identifier
-a = ut.tune(2, (1, 9), name='int_range')
-b = ut.tune(2.0, (1.0, 9.0), name='float_range')
-c = ut.tune('On', ['On', 'Off', 'Auto'])
-```
-
-(Optional) UpTune also supports annonation based approach, which allows users to decalre tunable variables and their desired range in comments. The annotation based declaration should be wrapped in `{% %}` specifier, and can be either attched to the preceding line or in the same line where the variable is declared.
-
-```python
-# tune `depth` in an integer range from 0 to 2 with default value of 1
-depth = 0 # {% depth=TuneInt(1, (0,2), 'name') %}
-
-a = 1.7  # {% a=TuneFloat(1.7, (0.0, 2.0)) %}
-b = True # {% b=TuneBool(True, ()) %}
-c = 'On' # {% c=TuneEnum('On', ['On', 'Off', 'Auto'], 'Mode') %}
-
-```
-Supported tuning modes include Boolean, Enumeration, Integer and Float, all with similar function signature. 
-
-#### Return the QoR (Quality of Result) 
-
-specify the return value that you want to maximize or minimize
-
 ```python
 import uptune as ut
 
-# return real-value with uptune.target()
-ret = ut.target(a * 3, 'min')
+# define tuning options
+options = {
 
-# or return with ut.save decorator
-@ut.save('max')
-def func(a, b, c):
-    return a * 3
+    "REMOVE_REDUNDANT_LOGIC_CELLS"   : ["ON", "OFF"],
+    "REMOVE_DUPLICATE_REGISTERS"     : ["OFF", "ON"],
+    "SEED"                           : range(1, 15),
+    "PLACEMENT_EFFORT_MULTIPLIER"    : (3.0, 4.0),
+    # ....
+}
 
-ret = func(a, b, c)
+# configure quartus tool options
+with open("config.tcl", "w") as f:
+    for k, v in options.items():
+        prop = ut.tune(v[0], v, name=k)
+        f.write("set_global_assignment {} {}\n".format(k, prop))
+
+# run the quartus with config script
+subprocess.Popen(["quartus_sh", "-t", "config.tcl"])
+
+# extract and return the qor 
+freq = ut.report.quartus(design)["frequency"]
+ut.target(freq, "max")
 ```
 
-#### Run The Tuning
-
-Pass the annotated python script into `uptune` with its own args followed by uptune args. 
+Save the program above as a python file (we use the name `program.py` in this example) and start tuning the program in different modes. In the default mode, `ut.tune()` returns the first argument it receives to the caller (i.e. the tuning is disabled).
 
 ```shell
-uptune file.py [args] [uptune-args]
+# 1. run in default mode (i.e. tuning is disabled)
+python program.py
 
-# or use `python -m` command
-python -m uptune.on file.py [args] [uptune args]
+# 2. start tuning the program with 4 parallel processes 
+uptune program.py -pf 4
+python -m uptune.on program.py -pf 4
+
+# 3. run the tuning with built-in or user-defined ML models
+uptune program.py -pf 4 -lm xgbregressor
+python -m uptune.on program.py -pf 4
+
 ```
-
-Examples of tuning python file with 4 parallel processes and XGBoost Regressor model for online pruning. 
-```
-uptune file.py -pf 4 -lm xgbregressor
-```
-The framework is extensible and allows users to plugin in machine learning models for space pruning.
-
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details

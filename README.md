@@ -12,7 +12,7 @@ A Generic Distributed Auto-Tuning Framework.
 
 The uptune framework has python and C++ API bindings, and we install both by default. The C++ requires cmake (>2.8), gcc (>4.8.5) and GoogleTest installed. Simply pull it back and run the install scripts, and uptune package will be installed to your local environment.
 
-```
+```shell
 git clone https://github.com/cornell-zhang/uptune.git; cd uptune;
 ./install.sh 
 ```
@@ -34,20 +34,21 @@ options = {
     # ....
 }
 
-# configure quartus and run through compilation 
-script = open("config.tcl", "w")
-for k, v in options.items():
-    prop = ut.tune(v[0], v, name=k)
-    script.write("set_global_assignment {} {}\n".format(k, v))
-script.close()
+# configure quartus tool options
+with open("config.tcl", "w") as f:
+    for k, v in options.items():
+        prop = ut.tune(v[0], v, name=k)
+        f.write("set_global_assignment {} {}\n".format(k, prop))
+
+# run the quartus with config script
 subprocess.Popen(["quartus_sh", "-t", "config.tcl"])
 
 # extract and return the qor 
-design = "gemm.v"
 freq = ut.report.quartus(design)["frequency"]
 ut.target(freq, "max")
 ```
-Save the program above as a py file (we use the name `program.py` in this example) and start tuning the program in different modes:
+
+Save the program above as a python file (we use the name `program.py` in this example) and start tuning the program in different modes. In the default mode, `ut.tune()` returns the first argument it receives to the caller (i.e. the tuning is disabled).
 
 ```shell
 # 1. run in default mode (i.e. tuning is disabled)

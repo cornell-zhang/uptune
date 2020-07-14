@@ -10,4 +10,5 @@ make -j4
 cd ../python
 python setup.py install --user
 pip install ray --user
+pip install --upgrade google-api-python-client
 cd ../

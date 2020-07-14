@@ -12,9 +12,17 @@ A Generic Distributed Auto-Tuning Framework.
 
 The uptune framework has python and C++ API bindings, and we install both by default. The C++ binding requires cmake (>2.8), gcc (>4.8.5) and GoogleTest to be installed. To install uptune, simply pull it back and run the install script with the following commands:
 
+#### Installation with Conda (Recommended)
+```shell
+conda create -n uptune python=3
+./install.sh
+```
+
+#### Installation 
 ```shell
 git clone https://github.com/cornell-zhang/uptune.git; cd uptune;
 ./install.sh 
+./py_package_install.sh
 ```
 
 ### Quick Start 

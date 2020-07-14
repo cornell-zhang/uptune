@@ -12,7 +12,7 @@ setup(name='uptune',
       author_email='sx233@cornell.edu',
       packages=['uptune', 'uptune.opentuner', 'uptune.add', 'uptune.tuners', 
                 'uptune.src', 'uptune.quickest',
-                'uptune.template', 'uptune.globaldb', 'uptune.plugins'],
+                'uptune.template', 'uptune.database', 'uptune.plugins'],
       entry_points = {
           'console_scripts': ['ut=uptune.on:main'],
       },

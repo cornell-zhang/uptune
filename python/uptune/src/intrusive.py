@@ -4,7 +4,7 @@ import logging, threading, time
 from datetime import datetime
 from matplotlib import pyplot as plt
 from multiprocessing.pool import ThreadPool
-from uptune import globaldb
+from uptune import database
 from uptune.api import ParallelTuning, RunProgram
 # from uptune.template.pipeline import device, distribute
 # from uptune.template.pubsub import publisher
@@ -54,7 +54,7 @@ class MpiController(ParallelTuning):
     def init_dbs(self, stage):
         """ start zeromq device queue """
         for _ in range(stage):
-            engine, Session = globaldb.globalconnect(self.args.database + str(_) + '.db')
+            engine, Session = database.globalconnect(self.args.database + str(_) + '.db')
             self._glbsession.append(Session())
             self._best.append(float('inf'))
 

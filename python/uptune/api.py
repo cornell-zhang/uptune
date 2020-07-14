@@ -19,7 +19,7 @@ from uptune.opentuner.search.manipulator import (
     PermutationParameter 
 )
 from uptune.plugins.causaldiscovery import notears
-from uptune.globaldb.globalmodels import *
+from uptune.database.globalmodels import *
 from uptune.opentuner.measurement.interface import (
     goodwait, goodkillpg, preexec_setpgid_setrlimit
 )

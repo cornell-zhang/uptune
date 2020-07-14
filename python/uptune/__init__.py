@@ -1,17 +1,4 @@
 # -*- coding: utf-8 -*- 
-"""
-    uptune
-    ------
-
-    uptune is an extensive and generic auto-tuning framework.
-
-    uptune provides modular system design, allowing users to customize  
-    search techinques tailored for various applications.
-
-    :copyright: 2019 Cornell CSL Zhang's Group 
-    :license: MIT license 
-
-"""
 import sys, os
 from types import ModuleType
 from .add import constraint
@@ -45,7 +32,7 @@ default_settings = {
     "runtime-limit"   : 7200,
     "parallel-factor" : 2,
     "learning-model"  : "xgbregressor",
-    "gpu-num"         : 1,
+    "gpu-num"         : 0,
     "cpu-num"         : 1,
 }
 

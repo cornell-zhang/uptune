@@ -10,3 +10,4 @@ sklearn
 matplotlib 
 psutil 
 setproctitle
+xgboost

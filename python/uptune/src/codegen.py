@@ -1,5 +1,5 @@
 import pandas as pd
-import re, os, sys, json, copy, random, ray, uptune, logging, subprocess
+import re, os, sys, json, copy, random, logging, subprocess
 from uptune.api import ParallelTuning, RunProgram
 from uptune.src.intrusive import mpisystem
 

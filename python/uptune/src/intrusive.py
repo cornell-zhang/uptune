@@ -37,7 +37,7 @@ class MpiController(ParallelTuning):
     
         result = self.call_program(cmd)
         assert result['returncode'] == 0, \
-               "given command cannot run thru: " + \
+               "given command \"" + cmd + "\" failed with : " + \
                result['stderr'].decode('utf-8')
         assert os.path.isfile('params.json'), \
                'params.json not found in current path'

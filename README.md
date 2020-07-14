@@ -15,6 +15,7 @@ The uptune framework has python and C++ API bindings, and we install both by def
 #### Installation with Conda (Recommended)
 ```shell
 conda create -n uptune python=3
+conda activate uptune
 ./install.sh
 ```
 

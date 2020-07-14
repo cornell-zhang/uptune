@@ -1,12 +1,12 @@
 import numpy as np
-import re, os, sys, ray, json, boto3
+import re, os, sys, ray, json
 import logging, threading, time
 from datetime import datetime
 from matplotlib import pyplot as plt
 from multiprocessing.pool import ThreadPool
 from uptune import globaldb
 from uptune.api import ParallelTuning, RunProgram
-from uptune.template.pipeline import device, distribute
+# from uptune.template.pipeline import device, distribute
 # from uptune.template.pubsub import publisher
 from uptune.opentuner.resultsdb.models import Result
 from uptune.src.multistage import score, multirun
@@ -42,16 +42,14 @@ class MpiController(ParallelTuning):
         assert os.path.isfile('params.json'), \
                'params.json not found in current path'
 
-
-    def add_devices(self, stage):
-        """ start zeromq device queue """
-        for s in range(stage):
-            front, end = 5559 + 2 * s, 5560 + 2 * s
-            thread = threading.Thread(target=device, args=(front, end))
-            thread.daemon = True                          
-            thread.start()                                
-            self.device_pool.append(thread)
-
+    # def add_devices(self, stage):
+    #     """ start zeromq device queue """
+    #     for s in range(stage):
+    #         front, end = 5559 + 2 * s, 5560 + 2 * s
+    #         thread = threading.Thread(target=device, args=(front, end))
+    #         thread.daemon = True                          
+    #         thread.start()                                
+    #         self.device_pool.append(thread)
 
     def init_dbs(self, stage):
         """ start zeromq device queue """
@@ -59,7 +57,6 @@ class MpiController(ParallelTuning):
             engine, Session = globaldb.globalconnect(self.args.database + str(_) + '.db')
             self._glbsession.append(Session())
             self._best.append(float('inf'))
-        
 
     def create_apis(self):
         """ create #stage by #parallel api matrix """
@@ -349,6 +346,7 @@ class MpiController(ParallelTuning):
                 fp.close()
 
         else: # upload cfg to aws s3 ins
+            import boto3
             s3resource = boto3.resource('s3')
             bucket_name = "uptune-aws-s3-008594ab-381e-4b67-826b-a56f4dc6c03f"
             bucket = s3resource.Bucket(bucket_name)
@@ -487,9 +485,7 @@ def mpisystem(args, command):
 
     # set the runtime limit for cmd
     cmd_timeout = args.runtime_limit
-    setattr(SingleProcess, 'run', 
-            run_builder(command, tpl, 
-                        mode, cmd_timeout))
+    setattr(SingleProcess, 'run', run_builder(command, tpl, mode, cmd_timeout))
     # setattr(SingleProcess, 'parse', 
     #         parse_builder(tpl, mode))
 

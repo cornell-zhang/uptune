@@ -90,11 +90,11 @@ The uptune framework can be configured in different ways to facilitate the DSE. 
 python program.py
 
 # 2. start tuning the program with 4 parallel processes 
-uptune program.py -pf 4
+ut program.py -pf 4
 python -m uptune.on program.py -pf 4
 
 # 3. run the tuning with built-in or user-defined ML models
-uptune program.py -pf 4 -lm xgbregressor
+ut program.py -pf 4 -lm xgbregressor
 python -m uptune.on program.py -pf 4
 
 ```

@@ -5,11 +5,11 @@ Exmaple Single Stage
 
 tune design for 20 epoches (intrusive mode)  
 ``` shell
-uptune single.py -pf 2 --test-limit 20
+ut hash.py -pf 2 --test-limit 20
 ```
 
 tune design for 2000 seconds (template mode)
 ``` shell
-uptune single_tpl.py --timeout 2000
+ut hash_template.py --timeout 2000
 ```
 

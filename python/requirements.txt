@@ -3,8 +3,8 @@ fn>=0.2.12
 future
 jinja2
 numpy>=1.8.0
+pandas
 SQLAlchemy>=0.8.2
-ray 
 sympy
 sklearn 
 matplotlib 

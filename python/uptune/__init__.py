@@ -14,11 +14,8 @@
 """
 import sys, os
 from types import ModuleType
-__version__ = "0.0.1.dev0"
-
-from . import api
-from . import opentuner
 from .add import constraint
+__version__ = "0.0.1.dev0"
 
 all_by_module = {
     "uptune.api": ["init", "get_best"],
@@ -101,6 +98,8 @@ class module(ModuleType):
         """
         return a list of ArguementParser to be used as parents to the user's
         """
+        from . import api
+        from . import opentuner
         return [
             opentuner.measurement.driver.argparser,
             opentuner.measurement.interface.argparser,

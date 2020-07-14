@@ -23,13 +23,13 @@ requirements:
   run:
     - python
     - xgboost
+    - argparse
     - future
     - jinja2
     - pandas
     - SQLAlchemy>=0.8.2
     - sympy
     - scikit-learn
-    - ray
     - matplotlib 
     - psutil 
     - setproctitle
@@ -37,8 +37,6 @@ requirements:
     - {{ pin_compatible('matplotlib') }}
 
 # test:
-#   requires:
-#     - ray
 #   commands:
 #     - ut -h
 #   imports:

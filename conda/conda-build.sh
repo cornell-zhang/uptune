@@ -5,7 +5,7 @@ array=( 3.5 3.6 3.7 3.8)
 
 echo "Building conda package ..."
 conda config --add channels conda-forge
-conda config --add channels bioconda
+conda config --add channels powerai
 
 # building conda packages
 for i in "${array[@]}"

@@ -8,6 +8,6 @@ make -j4
 ./uptune_tests
 
 cd ../python
-python setup.py install
+python setup.py install --user
 pip install ray --user
 cd ../

@@ -202,14 +202,17 @@ def execute(cmd, times=1):
     out, err = p.communicate()
     return p.returncode
 
-def run_with_flags(flags):
+def run_with_flags(flags, cmd=None):
     # pre-compile with flags
     tmp_dir = './' 
     output_dir = '%s/%s' % (tmp_dir, args.output)
     if os.path.isfile(output_dir):
         os.system("rm {}".format(output_dir))
-    cmd = args.compile_template.format(source=args.source, output=output_dir,
-                                       flags=' '.join(flags), cc=args.cc)
+
+    if cmd is None:
+        cmd = args.compile_template.format(source=args.source, output=output_dir,
+                                           flags=' '.join(flags), cc=args.cc)
+    print("CMD: {}".format(cmd))
 
     p1 = Process(target=execute, args=(cmd, )) 
     p1.start()
@@ -234,7 +237,7 @@ def run_with_flags(flags):
     return float(end - start) / (10 ** 6)
 
 def flags_mean_time(flags, trials=10):
-    total = run_with_flags(flags, 0)
+    total = run_with_flags(flags)
     tmp_dir = './' 
     output_dir = '%s/%s' % (tmp_dir, args.output)
     for _ in range(trials):
@@ -255,7 +258,7 @@ run_baselines()
 options = dict()
 options['-O'] = ut.tune(3, (0, 3), name="-O")
 for flag in found_cc_flags:
-    options[flag] = ut.tune('on', ['on', 'off', 'default'], name=flag)
+    options[flag] = ut.tune('default', ['on', 'off', 'default'], name=flag)
     
 for param in working_params:
     defaults = param_defaults[param]
@@ -265,14 +268,19 @@ for param in working_params:
 
     if param == 'l1-cache-line-size':
         # gcc requires this to be a power of two or it internal errors
-        options[param] = 2** ut.tune(2, (2, 8), name=param) 
+        options[param] = 2** ut.tune(defaults['default'], 
+                (2, 8), name=param) 
 
     elif defaults['max'] > 128:
-        options[param] = ut.tune(defaults['min'], (defaults['min'], defaults['max']), name=param) 
+        options[param] = ut.tune(defaults['default'], 
+                (defaults['min'], defaults['max']), name=param) 
         # m.add_parameter(manipulator.LogIntegerParameter(
         #   param, defaults['min'], defaults['max']))
     else:
-        options[param] = ut.tune(2, (defaults['min'], defaults['max']), name=param) 
+        options[param] = ut.tune(defaults['default'], 
+                (defaults['min'], defaults['max']), name=param) 
 
-print(make_command(options))
-
+cmd = make_command(options)
+runtime = run_with_flags([], cmd)
+print("Runtime {}".format(runtime))
+ut.target(runtime, "min")

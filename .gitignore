@@ -29,3 +29,4 @@ MANIFEST
 
 # Temporary
 __uptune__/
+res-*.json

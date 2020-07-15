@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*- 
-import sys, os
+import sys, os, logging
 from types import ModuleType
 from .add import constraint
+
+log = logging.getLogger(__name__)
 __version__ = "0.0.1.dev0"
 
 all_by_module = {
@@ -61,8 +63,13 @@ class module(ModuleType):
             return constraint.VarNode.nodes[name] 
 
         # ut.var returns 0 in default mode 
-        try: return ModuleType.__getattribute__(self, name)
-        except: return True
+        ModuleType.__getattribute__(self, name)
+        # try:
+        #     ModuleType.__getattribute__(self, name)
+        # except: 
+        #     log.warning("[ INFO ] Trying to access {}".format(name))
+        #     log.warning("[ INFO ] Skip returning symbolic variable handle in default mode...")
+        #     return True
 
     def __dir__(self):
         """ extend dir content """

@@ -8,7 +8,6 @@ make -j4
 ./uptune_tests
 
 cd ../python
-python setup.py install --user
+python setup.py develop --user
 pip install ray --user
-pip install --upgrade google-api-python-client
 cd ../

@@ -10,4 +10,4 @@ sklearn
 matplotlib 
 psutil 
 setproctitle
-xgboost
+xgboost==0.90

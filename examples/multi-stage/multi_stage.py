@@ -9,7 +9,7 @@ from synthesis import prestage, poststage
 
 designs = ['fir', 'mm3', 'aes', 'ode', 'syn2', 'dscg']
 assert len(sys.argv) == 2, \
-       "usage: python lambda.py design_name"
+       "usage: python multi_stage.py design_name"
 assert sys.argv[1] in designs, \
        "support designs: fir mm3 aes ode syn2 dscg"
 design = sys.argv[1]

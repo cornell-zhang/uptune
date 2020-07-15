@@ -117,17 +117,15 @@ def main():
     sys.argv = sys.argv[:1] + unknown
     command = ' '.join(sys.argv)
  
-    # mode: template  - single & multi  
+    # Mode: template  - single & multi  
     #       intrusive - single & multi $ decouple
     ctrl, mode, tpl = codegen(mainpyfile, args, command)
-    print('[     0s]    INFO uptune.on: running with %s mode; %s' % 
-               (str(mode), 'using template: ' + str(tpl)))
-    if mode == "single":  
-        ctrl.main(template=tpl)
-    elif mode == "multi": 
-        ctrl.multirun(template=tpl)
-    elif mode == "decouple": 
-        ctrl.decouple()
+    print('[     0s]    INFO uptune.on: Running with %s mode... %s' % 
+               (str(mode), 'Using template: ' + str(tpl)))
+
+    if mode == "single":  ctrl.main(template=tpl)
+    elif mode == "multi": ctrl.multirun(template=tpl)
+    elif mode == "decouple": ctrl.decouple()
     
 if __name__ == '__main__':
     main()

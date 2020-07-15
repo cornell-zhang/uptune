@@ -55,21 +55,23 @@ def multirun(self, template=False):
     self.create_instances() # stage 0 as default
 
     # offline training with default ratio=0.25
-    td = self.args.training_data
+    td = os.path.join('../', self.args.training_data)
     if os.path.isfile(td): 
         for ins in self._models:
             ins.init(td)
     else: 
-        log.warning('invalid traing data. \
-                    start tuning without offline training')
+        msg = "Invalid training data path: {}. ".format(td) + \
+              "Start tuning without offline training..."
+        log.warning(msg + str(self.args) + os.getcwd())
+
     if self.args.offline:
-        log.info('running on pure offline mode')
+        log.info('Running on pure offline mode...')
 
     # run trails 3*pf. randomly pick p from 1.5*pf
     total, ratio = 6, 0.5
     split = int(total * ratio * self._parallel)
-    for epoch in range(self._limit):
 
+    for epoch in range(self._limit):
         # generated pending-status dr
         drpool, idxpool = list(), list()
         while len(drpool) < total * self._parallel:

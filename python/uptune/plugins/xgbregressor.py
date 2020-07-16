@@ -13,7 +13,6 @@ class xgb_regressor(ModelBase):
     def __init__(self, name='xgb_regressor', interval=1):
         super(xgb_regressor, self).__init__(name, interval)
         self.storage = None  # pickle into stringio 
-    
 
     def init(self, path, rate=0.025):
         """ 
@@ -45,10 +44,8 @@ class xgb_regressor(ModelBase):
         self.model.fit(train_x, train_y, eval_metric='rmse', eval_set=eval_set, verbose=False)
         self.storage = pickle.dumps(copy.deepcopy(self.model))
 
-
     def get_model(self):
         return self.name, self.model
-
 
     def inference(self, sample):
         """ 
@@ -64,7 +61,6 @@ class xgb_regressor(ModelBase):
             model = pickle.loads(self.storage) 
             prediction = model.predict(sample)
             return prediction 
-
 
     def retrain(self):
         """ retrain model with self.valids """

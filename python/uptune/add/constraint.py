@@ -2,7 +2,6 @@
 import os, sys 
 from sympy import Symbol
 from sympy.core.relational import Relational
-from uptune.template import types
 from uptune.add import constraint as shared
 
 class VarNode(Symbol):

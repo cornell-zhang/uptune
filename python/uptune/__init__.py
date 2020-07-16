@@ -1,24 +1,10 @@
 # -*- coding: utf-8 -*- 
-"""
-    uptune
-    ------
-
-    uptune is an extensive and generic auto-tuning framework.
-
-    uptune provides modular system design, allowing users to customize  
-    search techinques tailored for various applications.
-
-    :copyright: 2019 Cornell CSL Zhang's Group 
-    :license: MIT license 
-
-"""
-import sys, os
+import sys, os, logging
 from types import ModuleType
-__version__ = "0.0.1.dev0"
-
-from . import api
-from . import opentuner
 from .add import constraint
+
+log = logging.getLogger(__name__)
+__version__ = "0.0.1.dev0"
 
 all_by_module = {
     "uptune.api": ["init", "get_best"],
@@ -48,7 +34,7 @@ default_settings = {
     "runtime-limit"   : 7200,
     "parallel-factor" : 2,
     "learning-model"  : "xgbregressor",
-    "gpu-num"         : 1,
+    "gpu-num"         : 0,
     "cpu-num"         : 1,
 }
 
@@ -77,8 +63,13 @@ class module(ModuleType):
             return constraint.VarNode.nodes[name] 
 
         # ut.var returns 0 in default mode 
-        try: return ModuleType.__getattribute__(self, name)
-        except: return True
+        ModuleType.__getattribute__(self, name)
+        # try:
+        #     ModuleType.__getattribute__(self, name)
+        # except: 
+        #     log.warning("[ INFO ] Trying to access {}".format(name))
+        #     log.warning("[ INFO ] Skip returning symbolic variable handle in default mode...")
+        #     return True
 
     def __dir__(self):
         """ extend dir content """
@@ -101,6 +92,8 @@ class module(ModuleType):
         """
         return a list of ArguementParser to be used as parents to the user's
         """
+        from . import api
+        from . import opentuner
         return [
             opentuner.measurement.driver.argparser,
             opentuner.measurement.interface.argparser,

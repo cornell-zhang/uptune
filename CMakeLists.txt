@@ -35,7 +35,3 @@ set(TEST_SOURCES
 add_executable(uptune_tests ${SOURCES} ${TEST_SOURCES})
 target_link_libraries(uptune_tests ${GTEST_LIBRARIES} ${LIBRARIES})
 
-# Compile samples
-# set(SAMPLE_CLIENT_SRC ${CMAKE_SOURCE_DIR}/samples/client.cc)
-# add_executable(rpc_client ${SAMPLE_CLIENT_SRC} ${SOURCES})
-# target_link_libraries(rpc_client ${FPGA_LIBS} ${LIBRARIES})

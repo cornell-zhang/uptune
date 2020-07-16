@@ -1,4 +1,5 @@
 #!/bin/bash
+
 rm -rf build
 mkdir build
 cd build
@@ -7,5 +8,6 @@ make -j4
 ./uptune_tests
 
 cd ../python
-python setup.py develop
+python setup.py develop --user
+pip install ray --user
 cd ../

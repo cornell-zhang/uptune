@@ -19,7 +19,7 @@ from uptune.opentuner.search.manipulator import (
     PermutationParameter 
 )
 from uptune.plugins.causaldiscovery import notears
-from uptune.globaldb.globalmodels import *
+from uptune.database.globalmodels import *
 from uptune.opentuner.measurement.interface import (
     goodwait, goodkillpg, preexec_setpgid_setrlimit
 )
@@ -43,7 +43,7 @@ argparser.add_argument('--aws', action='store_true', default=False,
                        help="use aws s3 storage for publishing")
 argparser.add_argument('--cfg', action='store_true', default=False,
                        help="display configuration on screen")
-argparser.add_argument('--gpu-num', type=int, default=1,
+argparser.add_argument('--gpu-num', type=int, default=0,
                        help="max number of gpu for each task")
 argparser.add_argument('--cpu-num', type=int, default=1,
                        help="max number of cpu for each task")

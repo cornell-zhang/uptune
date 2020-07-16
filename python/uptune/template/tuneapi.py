@@ -5,7 +5,6 @@ from uptune import config
 from uptune.template import types 
 from uptune.tuners import bandit
 from inspect import signature as sig
-import tvm
 
 def start():
     """Restarts the current program, with file objects and descriptors
@@ -60,24 +59,19 @@ def tune(default=None,
         assert name not in ut.mapping.keys(), \
                "invalid name for registeration" 
 
-    if isinstance(tuning_range, (list, tvm.container.Array)):
+    if isinstance(tuning_range, list):
         assert len(tuning_range) > 0, \
                "must specify the tuning range as list"
         assert default in tuning_range, \
                "default should be in list"
-        return types.TuneEnum(default, 
-                              tuning_range,
-                              name=name).val 
+        return types.TuneEnum(default, tuning_range, name=name).val 
 
     # custom func defining enum inter-deps
     elif callable(tuning_range):
         assert args, "args for function not specified"
         assert len(args) == len(sig(tuning_range).parameters), \
                "parameter number not match" 
-        return types.TuneEnum(default, 
-                              tuning_range,
-                              args=args,
-                              name=name).val 
+        return types.TuneEnum(default, tuning_range, args=args, name=name).val 
 
     # create nodes for numerical ops
     assert isinstance(tuning_range, tuple), \
@@ -86,12 +80,8 @@ def tune(default=None,
     if len(tuning_range) == 2:
         lower, upper = tuning_range
         if isinstance(lower, float) or isinstance(upper, float):
-            return types.TuneFloat(default, 
-                                   tuning_range,
-                                   name=name).val
-        return types.TuneInt(default, 
-                             tuning_range,
-                             name=name).val
+            return types.TuneFloat(default, tuning_range, name=name).val
+        return types.TuneInt(default, tuning_range, name=name).val
 
     # create permutation or boolean param
     assert len(tuning_range) == 0 and \
@@ -102,9 +92,7 @@ def tune(default=None,
     else: # create permutation param
         return types.TunePermutation(default, name=name).val
 
-def tune_at(default, 
-            tuning_range, 
-            path, name):
+def tune_at(default, tuning_range, path, name):
     """
     replace the holder for tuning non-python vars 
     """

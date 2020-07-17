@@ -1,5 +1,6 @@
 import collections
-from gcc_flags import cfg_to_flags, flags_mean_time 
+from tune_gcc import cfg_to_flags, flags_mean_time 
+import pandas as pd
 
 def flags_histogram(session):
   counter = collections.Counter()
@@ -37,5 +38,8 @@ def flag_importance(best_cfg):
       remaining_impact -= impact
   print(r'{} other flags & {:.1f}% \\\hline'.format(
       len(flags) - 20, 100.0 * remaining_impact / total_impact))
-# 
 
+df = pd.read_csv("archive.csv")
+p=df['qor'].max()
+q=df['qor'].min()
+print(p, q)

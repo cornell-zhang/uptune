@@ -231,27 +231,27 @@ def run_with_flags(flags, cmd=None):
         return float("inf") 
 
     # run pre-comnpiled with runtime_limit
-    start = time.time_ns()
+    start = time.time()
     code = execute(output_dir)
-    end = time.time_ns() 
-    return float(end - start) / (10 ** 6)
+    end = time.time() 
+    return float(end - start) * 1000
 
 def flags_mean_time(flags, trials=10):
     total = run_with_flags(flags)
     tmp_dir = './' 
     output_dir = '%s/%s' % (tmp_dir, args.output)
     for _ in range(trials):
-        start = time.time_ns()
+        start = time.time()
         code = execute(output_dir)
-        end = time.time_ns() 
-        total += float(end - start) / (10 ** 6)
+        end = time.time() 
+        total += float(end - start) * 1000
     return old_div(total, trials)
 
 def run_baselines():
     print("baseline perfs -O0={}ms -O1={}ms -O2={}ms -O3={}ms".format(
            *[run_with_flags(['-O%d' % i]) for i in range(4)]))
 
-run_baselines()
+# run_baselines()
 # -----------------
 # Run the autotuning 
 # -----------------

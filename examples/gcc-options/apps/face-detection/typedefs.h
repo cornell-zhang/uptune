@@ -27,27 +27,6 @@ const int COLS = 25;
 const int NUM_BANKS = 12;
 const int SIZE = 2913;
 
-#ifdef OCL
-  #include <string>
-  // target device
-  // change here to map to a different device
-  const std::string TARGET_DEVICE = "xilinx_aws-vu9p-f1-04261818_dynamic_5_0";
-#endif
-
-
-#ifndef SW
-  #include "ap_int.h"
-  // HLS-specific datatypes
-  typedef ap_uint<18> uint18_t;
-  typedef ap_uint<10> uint10_t;
-  typedef ap_uint<1>  bit;
-  typedef ap_uint<5> uint5_t;
-  typedef ap_uint<13> int_I;  
-  typedef ap_uint<21> int_SI;
-  typedef ap_uint<18> int_II;             
-  typedef ap_uint<26> int_SII;
-#endif
-
 // standard datatypes
 typedef struct MyPoint
 {

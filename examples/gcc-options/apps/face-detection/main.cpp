@@ -1,13 +1,108 @@
 /*===============================================================*/
 /*                                                               */
-/*                      face_detect-sw.cpp                       */
+/*                       face_detect.cpp                         */
 /*                                                               */
-/*             Software version for face detection.              */
+/*     Main host function for the Face Detection application.    */
 /*                                                               */
 /*===============================================================*/
 
-#include "face_detect_sw.h"
+// standard C/C++ headers
+#include <cstdio>
+#include <cstdlib>
+#include <getopt.h>
+#include <cstring>
+#include <string>
+#include <time.h>
+#include <sys/time.h>
+#include <fstream>
 
+// other headers
+#include "typedefs.h"
+
+// data
+#include "image0_320_240.h"
+
+char* strrev(char* str)
+{
+  char *p1, *p2;
+  if (!str || !*str)
+  	return str;
+  for (p1 = str, p2 = str + strlen(str) - 1; p2 > p1; ++p1, --p2)
+  {
+  	*p1 ^= *p2;
+  	*p2 ^= *p1;
+  	*p1 ^= *p2;
+  }
+  return str;
+}
+
+void itochar(int x, char* szBuffer, int radix)
+{
+  int i = 0, n, xx;
+  n = x;
+  while (n > 0)
+  {
+  	xx = n%radix;
+  	n = n/radix;
+  	szBuffer[i++] = '0' + xx;
+  }
+  szBuffer[i] = '\0';
+  strrev(szBuffer);
+}
+
+/* Writes a Pgm file using the hex image */
+int writePgm(const char *fileName, unsigned char Data[IMAGE_HEIGHT][IMAGE_WIDTH] )
+{
+  char parameters_str[5];
+  int i;
+  const char *format = "P5";
+  FILE *fp = fopen(fileName, "w");
+  
+  if (!fp){
+    printf("Unable to open file %s\n", fileName);
+    return -1;
+  }
+  
+  fputs(format, fp);
+  fputc('\n', fp);
+  
+  itochar(IMAGE_WIDTH, parameters_str, 10);
+  fputs(parameters_str, fp);
+  parameters_str[0] = 0;
+  fputc(' ', fp);
+  
+  itochar(IMAGE_HEIGHT, parameters_str, 10);
+  fputs(parameters_str, fp);
+  parameters_str[0] = 0;
+  fputc('\n', fp);
+  
+  itochar(IMAGE_MAXGREY, parameters_str, 10);
+  fputs(parameters_str, fp);
+  fputc('\n', fp);
+  
+  for (i = 0; i < IMAGE_HEIGHT; i++) 
+    for (int j = 0; j < IMAGE_WIDTH ; j++)
+       fputc(Data[i][j], fp);
+  
+  fclose(fp);
+  return 0;
+}
+
+/* draw white bounding boxes around detected faces */
+void drawRectangle(unsigned char Data[IMAGE_HEIGHT][IMAGE_WIDTH], MyRect r)
+{
+  int i;
+  int col = IMAGE_WIDTH;
+  
+  for (i = 0; i < r.width; i++)
+    Data[r.y][r.x + i] = 255;
+  for (i = 0; i < r.height; i++)
+    Data[r.y+i][r.x + r.width] = 255;
+  for (i = 0; i < r.width; i++)
+    Data[r.y + r.height][r.x + r.width - i] = 255;
+  for (i = 0; i < r.height; i++)
+    Data[r.y + r.height - i][r.x] = 255;
+}
 // function declarations
 void integralImages( int height, int width, unsigned char Data[IMAGE_HEIGHT][IMAGE_WIDTH], int Sum[IMAGE_HEIGHT][IMAGE_WIDTH], int Sqsum[IMAGE_HEIGHT][IMAGE_WIDTH]);
 
@@ -463,3 +558,86 @@ int min
     return b;
 }
 
+void check_results(int &result_size, 
+                   int result_x[RESULT_SIZE], 
+                   int result_y[RESULT_SIZE], 
+                   int result_w[RESULT_SIZE],  
+                   int result_h[RESULT_SIZE],
+                   unsigned char Data[IMAGE_HEIGHT][IMAGE_WIDTH],
+                   std::string outFile)
+{
+  std::ofstream ofile;
+  ofile.open("outputs.txt");
+  if (ofile.is_open())
+  {
+    ofile << "\nresult_size = " << result_size << std::endl;
+
+    MyRect result[RESULT_SIZE];
+
+    for (int j = 0; j < RESULT_SIZE; j++){
+      result[j].x = result_x[j];
+      result[j].y = result_y[j];
+      result[j].width = result_w[j];
+      result[j].height = result_h[j];
+    }
+
+    for( int i=0 ; i < result_size ; i++ )
+    {
+      ofile << "\n [Test Bench (main) ] detected rects: ";
+      ofile << result[i].x << " " << result[i].y << " " << result[i].width << " " << result[i].height;
+      ofile << std::endl;
+    }
+    ofile.close();
+   
+    printf("\n-- saving output image [Start] --\r\n"); 
+
+    // Draw the rectangles onto the images and save the outputs.
+    for(int i = 0; i < result_size ; i++ )
+    {
+      MyRect r = result[i];
+      drawRectangle(Data, r);
+    }
+
+    int flag = writePgm(outFile.c_str(), Data); 
+
+    printf("\n-- saving output image [Done] --\r\n");
+  }
+  else
+  {
+    printf("Failed to create output file!\n");
+  }
+
+}
+
+int main(int argc, char ** argv) 
+{
+  printf("Face Detection Application\n");
+
+  std::string outFile("");
+
+  // for this benchmark, input data is included in array Data
+  // these are outputs
+  int result_x[RESULT_SIZE];
+  int result_y[RESULT_SIZE];
+  int result_w[RESULT_SIZE];
+  int result_h[RESULT_SIZE];
+  int res_size = 0;
+
+  // timers
+  struct timeval start, end;
+
+  gettimeofday(&start, 0);
+  face_detect_sw(Data, result_x, result_y, result_w, result_h, &res_size);
+  gettimeofday(&end, 0);
+ 
+  // check results
+  printf("Checking results:\n");
+  check_results(res_size, result_x, result_y, result_w, result_h, Data, outFile);
+    
+  // print time
+  long long elapsed = (end.tv_sec - start.tv_sec) * 1000000LL + end.tv_usec - start.tv_usec;   
+  printf("elapsed time: %lld us\n", elapsed);
+
+  return EXIT_SUCCESS;
+
+}

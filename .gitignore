@@ -28,5 +28,11 @@ share/python-wheels/
 MANIFEST
 
 # Temporary
-__uptune__/
-res-*.json
+ut-*
+
+# Compilation temp
+*.aoc*
+time.out
+reg.err
+*.temp
+

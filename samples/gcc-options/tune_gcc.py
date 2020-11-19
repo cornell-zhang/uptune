@@ -24,7 +24,7 @@ import uptune as ut
 
 FLAGS_WORKING_CACHE_FILE = 'cc_flags.json'
 PARAMS_DEFAULTS_CACHE_FILE = 'cc_param_defaults.json'
-PARAMS_DEF_PATH = 'gcc-4.8.5/params.def'
+PARAMS_DEF_PATH = 'params.def'
 PARAMS_WORKING_CACHE_FILE = 'cc_params.json'
 
 log = logging.getLogger('gccflags')
@@ -35,9 +35,9 @@ argparser.add_argument('--compile-template',
                        default='{cc} {source} -o {output} -lpthread {flags}',
                        help='command to compile {source} into {output} with'
                             ' {flags}')
-argparser.add_argument('--compile-limit', type=float, default=30,
+argparser.add_argument('--compile-limit', type=float, default=300000,
                        help='kill gcc if it runs more than {default} sec')
-argparser.add_argument('--runtime-limit', type=float, default=30,
+argparser.add_argument('--runtime-limit', type=float, default=300000,
                        help='kill binary if it runs more than {default} sec')
 argparser.add_argument('--scaler', type=int, default=4,
                        help='by what factor to try increasing parameters')
@@ -215,6 +215,7 @@ def run_with_flags(flags, cmd=None):
     print("CMD: {}".format(cmd))
 
     p1 = Process(target=execute, args=(cmd, )) 
+    p1.daemon = True
     p1.start()
     start = time.time()
 
@@ -282,5 +283,5 @@ for param in working_params:
 
 cmd = make_command(options)
 runtime = run_with_flags([], cmd)
-print("Runtime {}".format(runtime))
+print("Runtime {} ms".format(runtime))
 ut.target(runtime, "min")

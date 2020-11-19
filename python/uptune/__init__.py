@@ -6,15 +6,23 @@ from .add import constraint
 log = logging.getLogger(__name__)
 __version__ = "0.0.1.dev0"
 
+# Lazy import
 all_by_module = {
-    "uptune.api": ["init", "get_best"],
+    "uptune.api": [
+        "init", 
+        "config",
+        "get_best"
+    ],
     "uptune.add.constraint": [
         "constraint",
     ],
     "uptune.template.tuneapi": [
         "tune",
     ],
-    "uptune.get_result": [
+    "uptune.report": [
+        "get_global_id",
+        "get_local_id",
+        "get_meta_data",
         "save",
         "target",
         "interm",
@@ -33,9 +41,12 @@ default_settings = {
     "test-limit"      : 10,
     "runtime-limit"   : 7200,
     "parallel-factor" : 2,
-    "learning-model"  : "xgbregressor",
     "gpu-num"         : 0,
     "cpu-num"         : 1,
+
+    "learning-model"  : "xgbregressor",
+    "training-data"   : "",
+    "online-training" : 1,
 }
 
 # objs to module name mapping
@@ -49,7 +60,14 @@ class module(ModuleType):
     def __init__(self, name):
         super(module, self).__init__(name)
         self.mapping = object_origins
-        self.config = default_settings
+        self.settings = default_settings
+
+    # The command line config has higher priority
+    def config(self, settings):
+        for k, v in settings.items():
+            assert k in default_settings.keys(), \
+                    "Invalid key \"{}\" found...".format(k)
+            self.settings[k] = v
 
     def __getattr__(self, name):
         if name in object_origins:

@@ -67,6 +67,7 @@ class xgb_regressor(ModelBase):
         X = self.valids[:, :94].astype(float)
         y = self.valids[:, -1].astype(float)
  
+        if int(len(X) * 0.9) < 1: return 
         train_x, test_x, train_y, test_y = train_test_split(X, y, train_size=0.9, shuffle=True)
         self.model = xgb.XGBRegressor( objective = 'reg:squarederror',
                                        n_estimators=300,

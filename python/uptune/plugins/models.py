@@ -43,6 +43,7 @@ class ModelBase(object):
                 np.concatenate((self.valids, array)) if len(self.valids) > 1 
                 else array)
         else:
+            print(features, results, "???")
             log.warning("no valid features/qors from validation")
   
     def clean(self):

@@ -8,9 +8,7 @@ class JinjaParser(object):
     top-level controller for generating ray.run()
     """
     def init(self):
-        """
-        setup loader and template syntax
-        """
+
         self.loader = FileSystemLoader(searchpath=os.getcwd()) 
         self.env = Environment(
             loader = self.loader,
@@ -20,27 +18,17 @@ class JinjaParser(object):
             variable_start_string="${{", 
             variable_end_string="}}")
         self.env.filters['patch'] = patch
-        self.context = {'node': -1, 
-                        'cfg': dict()} 
+        self.context = {'node': -1, 'cfg': dict()} 
 
     def render(self, filename):
-        """
-        load file and return rendered output
-        """
         template = self.env.get_template(filename)
         return template.render(self.context) 
 
     def set_context(self, cfg, node):
-        """
-        setup context with opentuner proposal for rendering
-        """
         self.context['node'] = node
         self.context['cfg']  = cfg
 
     def codegen(self, node, dr, filename):
-        """
-        dump code from tpl to file(s) based on dr  
-        """
         self.init()
         self.set_context(dr.configuration.data, node)
         result = self.render('template.tpl')

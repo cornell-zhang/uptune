@@ -9,47 +9,42 @@ from uptune.api import ParallelTuning, RunProgram
 # from uptune.template.pipeline import device, distribute
 # from uptune.template.pubsub import publisher
 from uptune.opentuner.resultsdb.models import Result
-from uptune.src.multistage import score, multirun
+from uptune.src.multi_stage import score, multirun
 
 log = logging.getLogger(__name__)
 
-# ---------------------------------------------------
-# Controller and func builders for general tuning
-# ---------------------------------------------------
-
 class MpiController(ParallelTuning):
-    """
-    top-level controller with copying file enabled 
-    """
     def __init__(self, cls, args, *pargs, **kwargs): 
         super(MpiController, self).__init__(cls, args, *pargs, **kwargs)
-        self.device_pool = list()
 
+    # Perform analysis before launching tuning tasks
     def analysis(self, cmd):
-        """ run the default program and extract cfg """
-        # analysis finished in built-in api mode
-        if os.path.isfile('params.json'):
-            return
+        if self.args.params_json != "":
+            assert os.path.isfile(self.args.params_json)
+            print("[ INFO ] Using given params JSON {}".format(self.args.params_json))
+            for f in os.listdir("ut-work-dir"):
+                rm_list = ""
+                if not f.startswith("ut-"):
+                    rm_list += " {}".format(f)
+                os.system("cd ut-work-dir; rm -rf {}".format(rm_list))
+            return True
+        else:
+            print("[ INFO ] Cleaning up the legacy work folder...")
+            os.system("rm -rf ut-work-dir")
 
+        # Run the program to extract search space
         entry = cmd.split()[0]
         if re.search(r'.*?\.py', entry):
             cmd = 'python ' + cmd
     
         result = self.call_program(cmd)
         assert result['returncode'] == 0, \
-               "given command \"" + cmd + "\" failed with : " + \
-               result['stderr'].decode('utf-8')
-        assert os.path.isfile('params.json'), \
-               'params.json not found in current path'
+               "Input command \"{}\" failed. Error msg:\n{}".format(cmd, result['stderr'].decode('utf-8'))
+        assert os.path.isfile("ut-tune-params.json"), \
+               "{} not found in current path".format(params_record)
+        self.args.params_json = "ut-tune-params.json"
+        return False
 
-    # def add_devices(self, stage):
-    #     """ start zeromq device queue """
-    #     for s in range(stage):
-    #         front, end = 5559 + 2 * s, 5560 + 2 * s
-    #         thread = threading.Thread(target=device, args=(front, end))
-    #         thread.daemon = True                          
-    #         thread.start()                                
-    #         self.device_pool.append(thread)
 
     def init_dbs(self, stage):
         """ start zeromq device queue """
@@ -234,9 +229,7 @@ class MpiController(ParallelTuning):
         # res = self.stage_async(apis[1], actors[1], 1)
         # print(res.get()); sys.exit()
 
-        # --------------------------
-        # launch stage-wise tuning  
-        # --------------------------
+        # Launch stage-wise tuning  
         for s in range(self._stage):
             args = (apis[s], actors[s], s) 
             res = pool.apply_async(self.stage_async, 
@@ -260,9 +253,7 @@ class MpiController(ParallelTuning):
         actors = [self.cls.remote(_, self.args) 
                       for _ in range(self._parallel)]
   
-        # ----------------------------------------
         # the user specifies the training data + models 
-        # ----------------------------------------
         self._models = self.training(self.args.learning_models) 
   
         start_time = time.time() 
@@ -273,9 +264,7 @@ class MpiController(ParallelTuning):
                 if desired_result is None:
                     continue
   
-                # ---------------------------------------------
                 # prune/skip/report back 
-                # ---------------------------------------------
                 while self.prune(api, desired_result) == False:
                     log.warning("duplicate configuration request by %s from node %d", 
                         desired_result.requestor,
@@ -285,9 +274,7 @@ class MpiController(ParallelTuning):
                 drs.append(desired_result)
                 cfgs.append(desired_result.configuration.data)
             
-            # ------------------------------------------
-            # start client run in parallel with ray remote
-            # ------------------------------------------
+            # Start client run in parallel with ray remote
             assert len(cfgs) == self._parallel, "All available cfgs have been explored"
             log.info('%s start tuning in parallel. global_best is %f', 
                          str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
@@ -330,27 +317,30 @@ class MpiController(ParallelTuning):
         return [api.get_best_configuration() for api in apis]
 
 
-    def publish(self, drs, stage, aws=False):
-        """
-        publish drs into __cfg__
-        """
-        cfgs = [d.configuration.data for d in drs]
+    def publish(self, drs, stage, meta=None, aws_s3_bucket=False):
+        cfgs = [ d.configuration.data for d in drs ]
         # distribute(cfgs, stage)
 
-        if not aws: 
-            base = '__cfg__/{}-{}.json' 
+        if not aws_s3_bucket: 
+            # Pulish configs for each thread
+            base = "configs/ut-dr-stage{}-index{}.json"
             for idx in range(len(cfgs)):
                 fname = base.format(stage, idx)
                 with open(fname, 'w') as fp:
                     json.dump(cfgs[idx], fp)
-                fp.close()
+            # Publish meta-data
+            if meta is not None:
+                fname = "configs/ut-meta-data.json"
+                with open(fname, 'w') as fp:
+                    json.dump(meta, fp)
 
-        else: # upload cfg to aws s3 ins
+        # Upload tuning proposals to AWS S3 bucket
+        else: 
             import boto3
             s3resource = boto3.resource('s3')
             bucket_name = "uptune-aws-s3-008594ab-381e-4b67-826b-a56f4dc6c03f"
             bucket = s3resource.Bucket(bucket_name)
-            base = '{}-{}.json' 
+            base = "ut-dr-stage{}-index{}.json"
             for idx in range(len(cfgs)):
                 fname = base.format(stage, idx)
                 with open(fname, 'w') as fp:
@@ -363,17 +353,17 @@ MpiController.multirun = multirun
 MpiController.score = score
 
 def run_builder(cmd, tpl, mode, timeout):
-    """ return different run() based on mode"""
+
     if tpl and mode == "decouple": 
         sys.exit("decouple mode invalid in template tuning")
 
     if mode == "single": 
-        from uptune.src.singlestage import single_run_builder 
+        from uptune.src.single_stage import single_run_builder 
         return single_run_builder(cmd, timeout)
 
     # template / intrusive 
-    elif mode == "multi":
-        from uptune.src.multistage import multi_run_builder 
+    elif mode == "multi-stage":
+        from uptune.src.multi_stage import multi_run_builder 
         return multi_run_builder(cmd, timeout)
 
     # intrusive tuning
@@ -382,9 +372,6 @@ def run_builder(cmd, tpl, mode, timeout):
 
 
 def decouple_run_builder(cmd, timeout):
-    """
-    build ray actor run() with subprocess 
-    """
     entry = cmd.split()[0]
     if re.search(r'.*?\.py', entry):
         cmd = 'python ' + cmd
@@ -433,65 +420,78 @@ def decouple_run_builder(cmd, timeout):
 
 
 def decouple_parse_builder():
-    """
-    build parse() for qor extraction from res-stage.json
-    """
     def parse(self):
         resfile = 'res-' + str(self.stage) + '.json'
         assert os.path.isfile(resfile), \
                'res-stage.json not found in current path'
-
         # node specifier index
         with open(resfile, 'r') as fp:
             index, res, trend = json.load(fp)[-1]
         fp.close()
         if trend == 'max':
            res = (-1.0) * res
-        return [index, res]
-        
+        return [index, res]  
     return parse
 
 
-def mpisystem(args, command):
-    """ return controller running main() """
+def create_task_scheduler(args, command):
     pt = MpiController(None, args)
-
-    # set up cls from run_builder
+    
     class SingleProcess(RunProgram):
-        """ ray actor """
-        def run(self, dr):
+        # Programmer executor
+        def run(self, desired_result):
             raise RuntimeError('run() not implemented')
-            
+
+        # Parse th runtime output log to get QoR
         def parse(self):
             raise RuntimeError('parse() not implemented')
 
-    # recover or analyze
-    print('[     0s]    INFO uptune.src: program profiling started')
-    pt.analysis(command)
-    with open('params.json', 'r') as fp:
-       stage = len(json.load(fp)) 
-       mode = "decouple" if stage > 1 else "single"
-    fp.close()
+    # TODO: support namespace for dynamic search space
+    # Each tuning var has its only scope. In this case, we
+    # will have a search space tree
+    # Example:
+    # {top} - {v1, v2, ...}
+    # left child - {top-if-01} - {vk, vk+1, ...}
+    # right clild - {top-for-ik} - {vi, vi+1}
+    
+    # Check if the parameter has been generated before
+    print('[ INFO ] Performing dynamic analysis...')
+    reuse_params = pt.analysis(command)
 
-    if os.path.isfile('feats.json'):
-        mode = "multi" 
-        assert stage == 1, \
-               "can only support decouple or multi-stage" 
+    params_record = "ut-tune-params.json"
+    params_config_dir = "ut-work-dir/configs"
+    interm_features = "ut-interim-features.json"
+
+    if reuse_params:
+        params_record = os.path.join("ut-work-dir", params_record)
+    with open(params_record, 'r') as fp:
+        stage = len(json.load(fp)) 
+        mode = "decouple" if stage > 1 else "single"
+
+    # Checking only supports single stage for multi-stage
+    if os.path.isfile(interm_features):
+        mode = "multi-stage" 
+        assert stage == 1, "can only support decouple or multi-stage" 
         
     # init controller 
+    pt.init()
     pt.init_dbs(stage)
-    tpl = True if os.path.isfile('template.tpl') else False
-    if not tpl: os.mkdir('__uptune__/__cfg__')
+
+    use_template = True if os.path.isfile('template.tpl') else False
+    if not use_template:
+        os.mkdir(params_config_dir)
 
     # set the runtime limit for cmd
     cmd_timeout = args.runtime_limit
-    setattr(SingleProcess, 'run', run_builder(command, tpl, mode, cmd_timeout))
-    # setattr(SingleProcess, 'parse', 
-    #         parse_builder(tpl, mode))
+
+    setattr(SingleProcess, 'run', 
+        run_builder(command, use_template, mode, cmd_timeout))
+    # setattr(SingleProcess, 'parse', parse_builder(tpl, mode))
 
     actor_cls = ray.remote(num_gpus=args.gpu_num,
                            num_cpus=args.cpu_num)(SingleProcess)
     pt.set_actor_cls(actor_cls)
-    pt.before_run(copy=True)
 
-    return pt, mode, tpl
+    # Create symbolic links for read-only files
+    pt.before_run(copy=True)
+    return pt, mode, use_template

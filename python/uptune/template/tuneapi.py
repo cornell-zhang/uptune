@@ -93,9 +93,6 @@ def tune(default=None,
         return types.TunePermutation(default, name=name).val
 
 def tune_at(default, tuning_range, path, name):
-    """
-    replace the holder for tuning non-python vars 
-    """
     # check local file 
     assert os.path.isfile(path), "file not exist"
     val = tune(default, 

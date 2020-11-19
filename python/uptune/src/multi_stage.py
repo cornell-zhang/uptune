@@ -1,12 +1,11 @@
 import numpy as np
-import sys, os, re, ray, json, random, logging
-from itertools import cycle
-from multiprocessing.pool import ThreadPool
-from uptune.api import ParallelTuning, RunProgram
+import pandas as pd
+import sys, os, re, ray, json, random, logging, time
+# from multiprocessing.pool import ThreadPool
+# from uptune.api import ParallelTuning, RunProgram
 from uptune.opentuner.resultsdb.models import Result
 
 log = logging.getLogger(__name__)
-
 
 def score(self, features):
     """ return score from ML models"""
@@ -58,11 +57,11 @@ def multirun(self, template=False):
     td = os.path.join('../', self.args.training_data)
     if os.path.isfile(td): 
         for ins in self._models:
+            print("Training model {}...".format(str(ins)))
             ins.init(td)
     else: 
-        msg = "Invalid training data path: {}. ".format(td) + \
-              "Start tuning without offline training..."
-        log.warning(msg + str(self.args) + os.getcwd())
+        log.warning("Invalid training data path: {}. ".format(td))
+        log.warning("Start tuning without offline training...")
 
     if self.args.offline:
         log.info('Running on pure offline mode...')
@@ -70,6 +69,8 @@ def multirun(self, template=False):
     # run trails 3*pf. randomly pick p from 1.5*pf
     total, ratio = 6, 0.5
     split = int(total * ratio * self._parallel)
+    arch_path = "../archive.csv"
+    start_time = time.time()
 
     for epoch in range(self._limit):
         # generated pending-status dr
@@ -140,6 +141,21 @@ def multirun(self, template=False):
         self.rpt_and_sync(epoch, drs, results, mapping)
         qors = [obj.time for obj in results]
 
+        # save validation qors to archive.csv
+        elapsed_time = time.time() - start_time
+        base = epoch * self._parallel 
+        for qor in qors: 
+            index = base + qors.index(qor)
+            if self._prev: index = index + self._prev + 1
+            is_best = 1 if qor == self._best[0] else 0
+            df = pd.DataFrame({"time" : elapsed_time, 
+                               "qor" : qor, "is_best" : is_best}, 
+                               columns=["time", "qor", "is_best"],
+                               index=[index])
+            header = ["time", "qor", "is_best"]
+            df.to_csv(arch_path, mode='a', index=False, 
+                      header=False if index > 0 else header)
+
         # retrain models based on qor (default hybrid) 
         if not self.args.offline:
             for ins in self._models:
@@ -164,27 +180,27 @@ def multi_run_builder(cmd, timeout):
 
     def run(self, dr, phase):
         """
-        ret list() forguideline
+        ret list() for guideline
         [node, val] for validation
         """
         self.start_run()
         if os.path.isfile('template.tpl'):
             self.dumper.codegen(self.index, dr, filename)
 
+        # evaluation
         if phase == "pre":
             exception_ret = None 
             res_fname = "feats.json"
             expected_type = list
             sample = True
+
         else: # validation phase
             exception_ret = float('inf') 
             res_fname = "res-0.json"
             expected_type = (int, float)
             sample = False
         
-        result = self.call_program(cmd, 
-                                   sample=sample,
-                                   limit=timeout)
+        result = self.call_program(cmd, sample=sample, limit=timeout)
         if result['returncode'] != 0: 
             log.warning("run collapsed with error on \
                         node %d, error msg: %s", \

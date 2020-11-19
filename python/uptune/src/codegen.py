@@ -1,9 +1,20 @@
 import pandas as pd
 import re, os, sys, json, copy, random, logging, subprocess
 from uptune.api import ParallelTuning, RunProgram
-from uptune.src.intrusive import mpisystem
+from uptune.src.async_task_scheduler import create_task_scheduler
 
 log = logging.getLogger(__name__)
+
+TuneTypes = [
+    "TuneInt", "TuneEnum", "TuneFloat", "TuneLog", "TuneBool"
+]
+
+class TuneValue(object):
+    def __init__(self, name):
+        self.name = name
+        self.var_type = ""
+        self.include_upper = False
+        self.include_lower = False
 
 TPL_INT   = ["IntegerParameter", "name", (0, 1000)]
 TPL_ENUM  = ["EnumParameter", "name", []]
@@ -20,28 +31,29 @@ TPL_DICT  = {
     "TuneBool"  : TPL_BOOL
 }
 
-INIT  = r'(\S+)\s*=\s*(Tune[a-zA-Z]+)\((.*?),\s*'  # capture Tune Specifier
+INIT  = r'(\S+)\s*=\s*(Tune[a-zA-Z]+)\((.*?),\s*'  # capture tuning pragmas
 SCOPE = '(?:(\(.*?\))|(\[.*\]))'                   # capture [] or ()
 TAIL  = ',*\s*(.*?)\)'                             # capture name tracker
 OBJ   = r'(\S+)\s*=\s*TuneRes\((?:(max)|(min))\)'  # capture the obejctive
 
-# unique name and result list 
+# Unique name and result list 
+# The name defined in ut-archive.csv will be reused
 unique, objective = set(), set()
-if os.path.isfile("archive.csv"):
-    names = pd.read_csv("archive.csv").columns[2:-1] 
+if os.path.isfile("ut-archive.csv"):
+    names = pd.read_csv("ut-archive.csv").columns[1:-1] 
 else: names = set()
 name_counter = -1
 
 def random_name(unique, name):
-    """
-    generate a random name for tuning variable 
-    """
-    if len(names) > 0: # used pre-generated names
+    # Reuse the name if it has been generated
+    if len(names) > 0: 
        global name_counter
        name_counter += 1
        return names[name_counter]
-    if name: # check dup
-        assert name not in unique, "duplicate name: " + name
+
+    if name: 
+        assert name not in unique, \
+            "[ FATAL ] Found duplicate name for tuning var {}".format(name)
         unique.add(name)
         return name
     chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -139,9 +151,6 @@ def validity_check(params, origins, content, index):
 
 
 def create_template(content):
-    """
-    parse and create json + template for parameter manipulator
-    """
     params_pool = list()
     pattern = r'{%(.*)%}'  
     template = copy.deepcopy(content)
@@ -174,29 +183,20 @@ def create_template(content):
 
     return False
     
-
 def codegen(filename, args, command, output=False):
-    """ 
-    python: parse the code and genearte @ray run(). for other language
-    codegen(readline(code))) generates params.json for controller 
-    and code_new.ext compilable 
-    """
     with open(filename) as f:
         content = f.readlines()
-    f.close()
-
-    template = create_template(content)
-    if output:
-        print(template)
-        sys.exit()
-
+        template = create_template(content)
+        if output:
+            print(template)
+            sys.exit()
     if template: 
         assert os.path.isfile('template.tpl'), \
                "no template generated"
-    return mpisystem(args, command)
+    return create_task_scheduler(args, command)
 
 
-if __name__ == '__main__':
-    os.environ['EZTUNING'] = 'ON'
+if __name__ == "__main__":
+    os.environ['UT_START'] = "ON"
     
     

@@ -3,9 +3,21 @@
 
 ### TODO
   * support rpc session for multi-platform communication
-  * support comment-out syntax in complement for TuneBool 
   * support automatic deployment to local/aws/gcp
   * support autotuning with inter-variable constraint  
+
+## 2020-11-18
+  * Use an async task scheduler 
+
+### 2020-11-12
+  * Updated naming conventions in source code
+  * Added plotting scripts to capture relationship between compile_time and 
+  * Switched to ray's wait API for task overtime
+  * Remove OpenTuner global database
+  * Updated the new constraint and search interface (@ut.rule)
+  * Support Async execution of different executors (the democratized tuners shouls also be controlled by the contralized cointroller)
+  * New scripts for Intel-AOCL synthesis report parsing
+  * Add new APIs to query global_id and local_id
 
 ### 2019-12-25
   * added permutation support & rename

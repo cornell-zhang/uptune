@@ -3,12 +3,11 @@ from builtins import object
 # from uptune.template.pipeline import server
 # from uptune.template.pubsub import subscriber
 from uptune.add import constraint
-from uptune.template.access import request, retrieve
+from uptune.template.access import request, retrieve, export_meta_data
 from uptune.src.codegen import (
     random_name, TPL_INT, TPL_ENUM, TPL_FLOAT,
     TPL_BOOL, TPL_PERM, TPL_LOG
 )
-
 
 class MetaInstanceRegistry(type):
     """Metaclass providing an instance registry """
@@ -59,23 +58,26 @@ class TuneBase(Registry):
 
     @property 
     def val(self):
-        """ 
-        return default if flag is off 
-        call controller for proposal cfg with flag on
-        """
-        if os.getenv("ANALYSIS") or os.getenv("UPTUNE"): 
-            # analyze params for enum, bool and perm
+        if os.getenv("UT_BEFORE_RUN_PROFILE"): 
+            # Analyze params for enum, bool and permutation
             if isinstance(self.scope, list) or callable(self.scope): 
-                if self.value == self.scope: tpl = TPL_PERM
-                elif isinstance(self.value, bool): tpl = TPL_BOOL
-                else: tpl = TPL_ENUM
+                if self.value == self.scope: 
+                    tpl = TPL_PERM
+                elif isinstance(self.value, bool): 
+                    tpl = TPL_BOOL
+                else: 
+                    tpl = TPL_ENUM
+
+                # Create a record for 
                 token = copy.deepcopy(tpl)
                 token[1] = random_name(TuneBase.names, self.name)
                 if self.args: # scope = (lambda, args)
                     self.scope = (self.scope, self.args)
                 token[2] = self.scope
                 TuneBase.params.append(token)
-            else: # infer and register numerical op
+
+            # infer and register numerical op
+            else: 
                 lb, ub = self.scope
                 name = random_name(TuneBase.names, self.name)
                 constraint.register(name, lb, ub)
@@ -87,23 +89,25 @@ class TuneBase(Registry):
                 TuneBase.params.append(token)
             return self.value
 
-        # default mode return
-        elif not os.getenv("EZTUNING"):
-            return self.value
-
-        else: # servers pull from queue 
+        # In tuning mode, pull the proposals back from
+        # the log. 
+        elif os.getenv("UT_TUNE_START"): 
+            tune_params = "../ut-tune-params.json" 
             if TuneBase.count == -1: 
-                assert os.path.isfile('params.json'), 'no params available'
-                assert os.getenv("STAGE"), 'no specified stage'
-                assert os.getenv("INDEX"), 'no specified index'
-                stage = int(os.getenv("STAGE"))
-                TuneBase.index = int(os.getenv("INDEX"))
+                assert os.path.isfile(tune_params), 'no params available'
+                assert os.getenv("UT_CURR_STAGE"), 'no specified stage'
+                assert os.getenv("UT_CURR_INDEX"), 'no specified index'
+                stage = int(os.getenv("UT_CURR_STAGE"))
+                TuneBase.index = int(os.getenv("UT_CURR_INDEX"))
 
                 # deprecated: retrieving data from mpi channels 
                 # TuneBase.index, TuneBase.proposal = server(stage)
 
-                if not os.getenv('AWS'):
+                # Request configs from centralized controller
+                if not os.getenv('UT_AWS_S3_BUCKET'):
                     TuneBase.proposal = request(TuneBase.index, stage)
+                    export_meta_data()
+
                 else: # load data from aws s3
                     import boto3
                     from botocore import UNSIGNED
@@ -115,14 +119,14 @@ class TuneBase(Registry):
                     s3.download_file(bucket_name, fname, fname)
                     with open(fname, 'r') as fp:
                         TuneBase.proposal = json.load(fp)
-                    fp.close()
 
-                with open('params.json', 'r') as fp:
+                with open(tune_params, 'r') as fp:
                     params = json.load(fp)
                     TuneBase.params = params[stage]
-                fp.close()
 
-                if stage > 0: # pull back best cfg from previous stages
+                # For a multi-stage decoupled tuning process
+                # load the best configutaion found in prev stage
+                if stage > 0: 
                     for idx in reversed(range(0, stage)):
                         TuneBase.params = params[idx] + TuneBase.params
                         TuneBase.proposal.update(retrieve(idx))
@@ -132,6 +136,10 @@ class TuneBase(Registry):
             ptype, key, scope = TuneBase.params[TuneBase.count]
             return TuneBase.proposal[key]
         
+        # default mode return
+        else:
+            return self.value
+
     def set_driver(self, driver):
         """
         link obj value to its driver for cfg assignment 
@@ -146,9 +154,6 @@ class TuneBase(Registry):
 
 
 class TuneInt(TuneBase):
-    """ 
-    class template for tuning integer variable 
-    """
     def __init__(self, default, scope, name=None):
         super(TuneInt, self).__init__(default, scope, name)
         assert type(scope) == tuple, "tuple scope for TuneInt"
@@ -160,9 +165,6 @@ class TuneInt(TuneBase):
 
 
 class TuneEnum(TuneBase):
-    """
-    class template for tuning enumeration variable 
-    """
     def __init__(self, default, scope, args=None, name=None):
         super(TuneEnum, self).__init__(default, scope, name)
         assert type(scope) == list, "list scope for TuneEnum"
@@ -172,9 +174,6 @@ class TuneEnum(TuneBase):
 
 
 class TuneFloat(TuneBase):
-    """ 
-    class template for tuning floating variable 
-    """
     def __init__(self, default, scope, name=None):
         super(TuneFloat, self).__init__(default, scope, name)
         assert type(scope) == tuple, "tuple scope for TuneFloat"
@@ -185,27 +184,18 @@ class TuneFloat(TuneBase):
 
 
 class TuneBool(TuneBase):
-    """ 
-    class template for tuning boolean variable 
-    """
     def __init__(self, default, name=None):
         super(TuneBool, self).__init__(default, [True, False], name)
         assert isinstance(default, bool), "default must be boolean"
 
 
 class TunePermutation(TuneBase):
-    """ 
-    class template for tuning permutation variable 
-    """
     def __init__(self, default, name=None):
         super(TunePermutation, self).__init__(default, default, name)
         assert isinstance(default, list), "default must be list"
 
 
 class TuneResult(object):
-    """ 
-    class template for tuning result i.e. feedback 
-    """
     def __init__(self, result, objective='minimize'):
         self.result = float(result)
         self.objective = objective

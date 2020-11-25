@@ -36,7 +36,7 @@ inline bool is_finite_f32(float x) {return isfinite(x); }
 #define OK 8
 #define OI 8
 #define OJ 8
-#define II 10
+#define II 11
 #define JJ 8
 #define KK 8
 #define JJJ 16
@@ -197,9 +197,9 @@ __kernel void kernel_c_run_on_device(
  // produce C
  float16 _C_shreg[II][JJ][257];
  // produce B
- float16 _B_shreg[10][8];
+ float16 _B_shreg[II][JJ];
  // produce A
- float16 _A_shreg[10][8];
+ float16 _A_shreg[II][JJ];
  int counter[II][JJ];
  #pragma unroll
  for (int _s_ii = 0; _s_ii < II; _s_ii++)
@@ -365,7 +365,7 @@ channel float8 _collector_channel __attribute__((depth(256))) ;
 // Address spaces for kernel_collector_gather_drainer_run_on_device
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
-__kernel void kernel_collector_gather_drainer(
+__kernel void kernel_collector_gather_drainer_run_on_device(
 )
 {
  float8 _collector_gather_drainer_shreg;
@@ -393,3 +393,4 @@ __kernel void kernel_unloader_run_on_device(
  }
 } // kernel kernel_unloader_run_on_device
 #undef __address_space__unloader
+

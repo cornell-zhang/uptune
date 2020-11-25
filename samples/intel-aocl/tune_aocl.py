@@ -7,7 +7,7 @@ import argparse
 from multiprocessing import Process
 
 THREAD = 6
-design = "gemm"
+design = "jpeg_decoder"
 TIMEOUT = 20 * 60 * 60 
 
 def run_process(cmd, pattern=None, env=None, debug=True):
@@ -53,7 +53,7 @@ def config(option):
         json.dump(option, write_file)
 
 def execute():
-    cmd = "./build.sh FULL"
+    cmd = "./run.sh"
     run_process(cmd)
 
 def cleanup():
@@ -90,21 +90,26 @@ def main(parse_only=False):
     # We just copy the rpt to separate folder
     if os.getenv("UT_TUNE_START"):        
         index = ut.get_global_id()
-        work_path = ut.get_meta_data("UT_WORK_DIR")
+        work_path = os.path.join(ut.get_meta_data("UT_WORK_DIR"), "ut-work-dir")
 
+    index = "ut-rpt-{}".format(index)
     rpt_folder = os.path.join(work_path, str(index))
     cmd = "mkdir -p {}; ".format(rpt_folder)
     cmd += "cd {}; ".format(design)
-    cmd += "cp acl_quartus_report.txt *json *rpt *qsf {}".format(rpt_folder)
+    cmd += "cp acl_quartus_report.txt *json *rpt *qsf {}; cp ../*log {}".format(rpt_folder, rpt_folder)
     run_process(cmd)
 
     # Read frequency
     rpt = "{}/acl_quartus_report.txt".format(rpt_folder)
-    with open(rpt, "r") as fp:
-        content = str(fp.readlines())
-        match = re.search(r"Kernel fmax: (\d+\.\d+)", content)
-        qor = float(match[1])
-
+    if os.path.isfile(rpt):
+        with open(rpt, "r") as fp:
+            content = str(fp.readlines())
+            match = re.search(r"Kernel fmax: (\d+\.\d+)", content)
+            qor = float(match[1])
+    else:
+        print("Cannot find acl quartus report...")
+        qor = -1 * float("inf")
+    
     # Remove temp in profiling phase
     if os.getenv("UT_BEFORE_RUN_PROFILE"):
         cleanup()

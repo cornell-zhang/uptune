@@ -1,17 +1,30 @@
 #!/bin/bash
 execute() { echo "\$ $@" ; "$@" ; }
-INTEL_VALB_MODE=false
-
+INTEL_VALB_MODE=true
+DESIGN="jpeg_decoder"
 
 if [ "$INTEL_VALB_MODE" = true ] ; then
     echo '[ INFO ] submitting jobs to qsub batch...'
     # Casse 1: on Intel vLabs to sumbit jobs to remote nodes
     # sharing the same file system
 
-    execute qsub -v "path=${PWD}" -N job${UT_CURR_INDEX} -o output/aocl.out \
-        -e output/aocl.err -m ea -M xiang.elec@gmail.com qsub-run.sh
-    # wait for the job to finish
-    qsub -sync y job${UT_CURR_INDEX}
+    JOB=JOB$UT_CURR_INDEX
+    if [ -z $UT_CURR_INDEX ]; then
+        CURR_PATH="."
+    else
+        # When executing the script, the workdir has been renamed
+        CURR_PATH="$UT_WORK_DIR/ut-work-dir/$UT_CURR_INDEX-inuse"
+    fi
+
+    # Wait for the job to finish
+    execute qsub -v "path=${PWD}" -N job${UT_CURR_INDEX} -o aocl.out \
+        -e aocl.err -Wblock=true qsub-run.sh
+    # -m ea -M xiang.elec@gmail.com
+
+    if [ -z $UT_CURR_INDEX ]; then
+        echo "In profiling mode -- cleaning up the temp files..."
+        rm -rf "$DESIGN.aoc* $DESIGN $DESIGN*temp $DESIGN.link* time.out reg.err aocl.err aocl.out"
+    fi
 
 # Case 2: local machine multi-threads
 # Execute the build script directly

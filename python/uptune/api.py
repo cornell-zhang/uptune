@@ -190,8 +190,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 manipulator.add_parameter(IntegerParameter(pname, prange[0], prange[1]))
             elif ptype == "EnumParameter": 
                 manipulator.add_parameter(EnumParameter(pname, prange))
-                self._mapping[pname] = dict([(y,x+1) for x,y \
-                                            in enumerate(sorted(set(prange)))])
+                self._mapping[pname] = dict([(y,x) for x,y in enumerate(set(prange))])
             elif ptype == "FloatParameter": 
                 manipulator.add_parameter(FloatParameter(pname, prange[0], prange[1]))
             elif ptype == "LogIntegerParameter": 
@@ -395,10 +394,11 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             return True 
         return False
 
+    # Encode enum iterm into an index number
     def encode(self, key, val):
-        """ encode list or string into numbers"""
-        if key in self._mapping: # return string encoding
+        if key in self._mapping: 
             return self._mapping[key][val] 
+        # Permutation type
         elif isinstance(val, list):
             return [val] 
         return val

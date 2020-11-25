@@ -4,7 +4,7 @@ set -e
 set -x
 
 UT_CXX_API=false
-UT_CAUSAL_PKG=true
+UT_CAUSAL_PKG=false
 
 if $UT_CXX_API; then 
     rm -rf build

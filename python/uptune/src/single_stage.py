@@ -37,16 +37,15 @@ def single_run_builder(cmd, timeout):
                 if not result['stderr'].decode('utf-8'):
                     log.warning("current runtime limit is %d. " + \
                                 "consider increase with -rt option", timeout)
-            self.end_run()
-            return [ self.index, {}, eval_time, float('inf') ]
+            pair = [ self.index, {}, eval_time, float('inf') ]
 
         # Parse the local output log and return the QoR
         # back to central controller 
         # Format [ index, {co-variates}, eval_time, QoR ]
         try: 
             log_file = "ut-qor-stage-0.json"
-            if not os.path.isfile(log_file):
-                raise RuntimeError("[ FATAL ] QoR log {} not found. ".format(log_file))
+            assert os.path.isfile(log_file), "[ FATAL ] QoR log {} not found on node #{}. ".\
+                    format(log_file, self.index)
         
             # Read the last (latest measurement QoR)
             with open(log_file, 'r') as fp:
@@ -64,16 +63,16 @@ def single_run_builder(cmd, timeout):
                 f = open(covars_log, 'r')
                 covars = json.load(f)
                 f.close()
-            
             pair = [ index, covars, eval_time, res ]
-            self.end_run()
-            return pair
 
         except Exception as e:
             log.warning("parse data failure on node %d, \
                          return inf. %s", self.index, e.message)
-            self.end_run()
-            return float('inf')
+            pair = [ self.index, {}, eval_time, float('inf') ]
+
+        open("finish.out", 'a').close()
+        self.end_run() 
+        return pair
 
     return run
 

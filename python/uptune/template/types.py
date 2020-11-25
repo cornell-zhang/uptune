@@ -168,7 +168,10 @@ class TuneEnum(TuneBase):
     def __init__(self, default, scope, args=None, name=None):
         super(TuneEnum, self).__init__(default, scope, name)
         assert type(scope) == list, "list scope for TuneEnum"
-        assert len(scope) > 1, "at least one option in scope for TuneEnum"
+        assert len(scope) > 1, "At least one option in scope for TuneEnum: {}".format(str(scope))
+        # Handle duplicates in the input list
+        if len(scope) != len(set(scope)):
+            scope = list(set(scope))
         if args: self.args = args
         self.scope = scope
 

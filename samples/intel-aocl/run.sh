@@ -1,7 +1,7 @@
 #!/bin/bash
 execute() { echo "\$ $@" ; "$@" ; }
 INTEL_VALB_MODE=true
-DESIGN="jpeg_decoder"
+DESIGN="$1"
 
 if [ "$INTEL_VALB_MODE" = true ] ; then
     echo '[ INFO ] submitting jobs to qsub batch...'

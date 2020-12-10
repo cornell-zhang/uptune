@@ -7,7 +7,7 @@ import argparse
 from multiprocessing import Process
 
 THREAD = 6
-design = "jpeg_decoder"
+design = "gzip"
 TIMEOUT = 20 * 60 * 60 
 
 def run_process(cmd, pattern=None, env=None, debug=True):
@@ -52,8 +52,8 @@ def config(option):
     with open("{}/option.json".format(design), "w") as write_file:
         json.dump(option, write_file)
 
-def execute():
-    cmd = "./run.sh"
+def execute(design):
+    cmd = "./run.sh {}".format(design)
     run_process(cmd)
 
 def cleanup():
@@ -75,7 +75,7 @@ def main(parse_only=False):
             os.unlink(design)
 
         t1 = Process(target=config, args=(option, )) 
-        t2 = Process(target=execute, args=()) 
+        t2 = Process(target=execute, args=(design, )) 
         t1.daemon = True
         t2.daemon = True
         t1.start()

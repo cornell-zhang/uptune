@@ -19,5 +19,6 @@ jobs:
             sudo make
             sudo cp *.a /usr/lib
             cd ~/project/
+            pip install cython
             ./install.sh
 

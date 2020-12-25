@@ -7,7 +7,7 @@ import argparse
 from multiprocessing import Process
 
 THREAD = 6
-design = "gzip"
+design = "gemm"
 TIMEOUT = 20 * 60 * 60 
 
 def run_process(cmd, pattern=None, env=None, debug=True):
@@ -96,7 +96,7 @@ def main(parse_only=False):
     rpt_folder = os.path.join(work_path, str(index))
     cmd = "mkdir -p {}; ".format(rpt_folder)
     cmd += "cd {}; ".format(design)
-    cmd += "cp acl_quartus_report.txt *json *rpt *qsf {}; cp ../*log {}".format(rpt_folder, rpt_folder)
+    cmd += "cp acl_quartus_report.txt quartus_sh_compile.log *json *rpt *qsf {}; cp ../*log {}".format(rpt_folder, rpt_folder)
     run_process(cmd)
 
     # Read frequency

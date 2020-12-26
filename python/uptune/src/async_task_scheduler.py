@@ -317,17 +317,25 @@ class MpiController(ParallelTuning):
         return [api.get_best_configuration() for api in apis]
 
 
-    def publish(self, drs, stage, meta=None, aws_s3_bucket=False):
-        cfgs = [ d.configuration.data for d in drs ]
-        # distribute(cfgs, stage)
-
+    def publish(self, drs, stage, meta=None, aws_s3_bucket=False): 
         if not aws_s3_bucket: 
-            # Pulish configs for each thread
             base = "configs/ut-dr-stage{}-index{}.json"
-            for idx in range(len(cfgs)):
-                fname = base.format(stage, idx)
-                with open(fname, 'w') as fp:
-                    json.dump(cfgs[idx], fp)
+            if isinstance(drs, list):
+                # In sync execution mode. Create drs for each executor
+                cfgs = [ d.configuration.data for d in drs ]
+                # Pulish configs for each thread
+                for idx in range(len(cfgs)):
+                    fname = base.format(stage, idx)
+                    with open(fname, 'w') as fp:
+                        json.dump(cfgs[idx], fp)
+            else:
+                # In async execution mode. 
+                assert isinstance(drs, dict), str(drs)
+                for index, dr in drs.items():
+                    cfg = dr.configuration.data
+                    fname = base.format(stage, index)
+                    with open(fname, 'w') as fp:
+                        json.dump(cfg, fp)
             # Publish meta-data
             if meta is not None:
                 fname = "configs/ut-meta-data.json"

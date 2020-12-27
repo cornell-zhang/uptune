@@ -79,6 +79,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         self._limit      = args.test_limit 
         self._best       = list()
         self._cfg        = None
+        self._pending    = list()                  # pending configs being validated
         self._prev       = False                   # whether recovering from history 
         self._valid      = False                   # whether pruning is enabled
         self._ratio      = 0.3                     # pruning score percentage threshold
@@ -151,6 +152,11 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                     json.dump([cfg, result], fp)
             flag = True
   
+        # remove the config from pending list
+        if requestor != "seed":
+            assert cfg in self._pending, str(self._pending)
+            self._pending.remove(cfg)
+
         api.manipulator.normalize(cfg)
         hashv = api.manipulator.hash_config(cfg)
         g = GlobalResult(epoch = epoch, 
@@ -256,7 +262,13 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             if os.path.exists(arch_path):
                 keys = [ item[1] for item in self._params[0] ]
                 df = pd.read_csv(arch_path)
-                if df.duplicated(subset=keys).any():
+                check = [ df[k]==v for k, v in cfg.items() ]
+                dup = check.pop()
+                while len(check) > 0:
+                    dup &= check.pop()
+                if dup.any():
+                    result = Result(time=1) 
+                    api.report_result(desired_result, result)
                     return False
             return True
         else:
@@ -350,15 +362,22 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             return len(data.values) - 1
   
     def prune(self, api, stage, desired_result):
-        """ 
-        prune unpromising + duplicate proposals with learning models 
-        generate a weighed score from the model ensemble
-        """
+        """ Prune away duplicate and unpromising proposals """
         if self.unique(api, stage, desired_result) == True:
-            if self._valid == True:  # use ML model pruning 
+            # use ML model pruning 
+            if self._valid == True:  
                 assert len(self._models) > 0, "No model available"
-                if self.multivoting(stage, desired_result) == True: return True
-                else: return False 
+                # generate a weighed score from the model ensemble
+                if self.multivoting(stage, desired_result) == True: 
+                    return True
+                else: 
+                    return False 
+            # Checking if the dr is being validated
+            # TODO: the comparison does not work for object enum
+            config = desired_result.configuration.data
+            if config in self._pending:
+                return False
+            self._pending.append(desired_result.configuration.data)
             return True 
         return False
 
@@ -398,8 +417,8 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         local_results = []
         local_build_times = []
 
-        def get_config(task_list):
-            drs, cfgs = dict(), dict()
+        def get_config(task_list, drs):
+            cfgs = dict()
             for index in task_list:
                 desired_result = None
                 api = self._apis[index]
@@ -425,9 +444,13 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         keys = [ item[1] for item in self._params[0] ]
         arch_path = "../ut-archive.csv"
 
+        # objects list saves the pending tasks
+        objects = list()
+        drs = dict()
         while not_reach_limit:
             # Prepare inputs 
-            drs = get_config(free_task_list)
+            # The new desired result will overwrite the old ones
+            drs = get_config(free_task_list, drs)
             if not template: 
                 measure_num = trial_num
                 if self._prev and trial_num == 0: 
@@ -436,8 +459,9 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                         "UT_WORK_DIR":    os.path.abspath("../")}
                 self.publish(drs, stage=0, meta=meta)
             # Invoke remote executors
-            objects = []
             for index in free_task_list:
+                print("[ DEBUG ] dispatch new task on node {}: {}"\
+                    .format(index, str(drs[index].configuration.data)))
                 obj = actors[index].run.remote(drs[index]) 
                 objects.append(obj)
             free_task_list = []
@@ -447,12 +471,14 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             # Check the executor pool periodically
             while True:
                 qors, not_ready_refs = ray.wait(objects, timeout=self._interval)
-                # print("[ DEBUG ] Task ", len(qors), self._interval)
+                objects = not_ready_refs
+                print("[ DEBUG ] Checking wait time", len(qors), self._interval)
                 if (len(qors) > 0):
                     new_qor_count += len(qors)
                     results, covars, eval_times = [], [], []
                     for qor in qors:
                         index, covar_list, eval_time, target = ray.get(qor)
+                        print("[ DEBUG ] Free node {}".format(index))
                         free_task_list.append(index)
                         eval_times.append(eval_time)
                         results.append(target)

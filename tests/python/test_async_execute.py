@@ -17,9 +17,9 @@ ut.config(settings)
 # The task scheduler will dispatch the next available
 # proposal to any free actor in the queue
 def test_async_execution():
-    bell = ut.tune(10, (0, 20))
-    time.sleep(bell)
-    ut.target(bell, "max")
+    stall = ut.tune(10, (0, 20), name="stall")
+    time.sleep(stall)
+    ut.target(stall, "max")
 
 if __name__ == "__main__":
     test_async_execution()

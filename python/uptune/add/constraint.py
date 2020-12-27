@@ -2,57 +2,68 @@
 import os, sys 
 from sympy import Symbol
 from sympy.core.relational import Relational
-from uptune.add import constraint as shared
+
+class Schedule(object):
+    rules = []
+    constraints = []
+    custom_search_models = []
 
 class VarNode(Symbol):
-    """
-    VarNode for Constraint Net
-    override ops for constraint record 
-    """
+    """ VarNode to record the constraints symbolically """
     nodes = dict()
     constraint = []
 
     def __new__(cls, name, *args):
         return super(VarNode, cls).__new__(cls, name)
 
-    def __init__(self, name, lower, upper):
+    def __init__(self, name, scope):
         super(VarNode, self).__init__()
         self.name  = name
-        self.lower = lower
-        self.upper = upper
+        self.scope = scope
+    
+    def __str__(self):
+        return "ut.VarNode(name={}, scope={})".\
+            format(self.name, self.scope)     
+    
+    def __repr__(self):
+        return "ut.VarNode(name={}, scope={})".\
+            format(self.name, self.scope)
 
-def register(name, lower, upper=None):
-    """ 
-    register node with constraint
-    """
-    assert isinstance(lower, (float, int, VarNode)), \
-           "invalid lower bound type " + str(type(lower))
-    if upper: # not a fixed value
-        assert isinstance(upper, (float, int, VarNode)), \
-               "invalid upper bound type " + str(type(upper))
-    else: upper = lower
-    shared.VarNode.nodes[name] = VarNode(name, lower, upper) 
+def register(var, name=None):
+    """ Register node with constraint """
+    # registering internal UtTune objects and user-input co-vars
+    scope = None
+    if name is None: name = var.name
+    if isinstance(var, VarNode):
+        scope = var.scope
+    VarNode.nodes[name] = VarNode(name, scope)
 
-def constraint(*args):
-    """
-    add constrains to search engine.
-    information collected in analysis mode
-    --------------
-    Parameters:
-        args: exprs on vars 
-    """
-    if os.getenv("ANALYSIS"): 
-        for arg in args:
-            assert isinstance(arg, Relational), \
-                   "invalid constraint type" + str(type(arg))
-            shared.VarNode.constraint.append(arg)
+# add user specific rules
+def rule(name=None):
+    def decorator(function):
+        # TODO: statistically checking the legality
+        def wrapper(*args, **kwargs):
+            func(*args, **kwargs)
+        Schedule.rules.append(wrapper)
+        return wrapper
+    return decorator
+
+# add user specific qor constraints
+def constraint(name):
+    """ Record constrains between VarNodes """
+    def decorator(function):
+        # TODO: statistically checking the legality
+        def wrapper(*args, **kwargs):
+            func(*args, **kwargs)
+        Schedule.constraints.append(wrapper)
+        return wrapper
+    return decorator
 
 if __name__ == "__main__":
     import uptune as ut
+    from uptune.add import constraint as shared
     register('a', 0, 3)
     register('b', 2, ut.a)
     register('c', 2.0, 9.7)
     print(type(ut.a))
     print(shared.VarNode.nodes)
-    ut.constraint(ut.a * ut.a <= ut.b * ut.b, 
-                  ut.a + ut.c >= 7.5) 

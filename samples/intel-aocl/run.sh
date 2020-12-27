@@ -17,7 +17,7 @@ if [ "$INTEL_VALB_MODE" = true ] ; then
     fi
 
     # Wait for the job to finish
-    execute qsub -v "path=${PWD}" -N job${UT_CURR_INDEX} -o aocl.out \
+    execute qsub -v "path=${PWD}" -l walltime=36:00:00 -N job${UT_CURR_INDEX} -o aocl.out \
         -e aocl.err -Wblock=true qsub-run.sh
     # -m ea -M xiang.elec@gmail.com
 

@@ -2,7 +2,7 @@ import uuid, os, copy, json
 from builtins import object
 # from uptune.template.pipeline import server
 # from uptune.template.pubsub import subscriber
-from uptune.add import constraint
+from uptune.add.constraint import register, VarNode
 from uptune.template.access import request, retrieve, export_meta_data
 from uptune.src.codegen import (
     random_name, TPL_INT, TPL_ENUM, TPL_FLOAT,
@@ -58,6 +58,8 @@ class TuneBase(Registry):
 
     @property 
     def val(self):
+        register(self)
+        # return the proposal in run-time
         if os.getenv("UT_BEFORE_RUN_PROFILE"): 
             # Analyze params for enum, bool and permutation
             if isinstance(self.scope, list) or callable(self.scope): 
@@ -80,7 +82,6 @@ class TuneBase(Registry):
             else: 
                 lb, ub = self.scope
                 name = random_name(TuneBase.names, self.name)
-                constraint.register(name, lb, ub)
                 tpl = TPL_INT if isinstance(lb, int) and \
                                  isinstance(ub, int) else TPL_FLOAT
                 token = copy.deepcopy(tpl)
@@ -158,10 +159,13 @@ class TuneInt(TuneBase):
         super(TuneInt, self).__init__(default, scope, name)
         assert type(scope) == tuple, "tuple scope for TuneInt"
         assert len(scope) == 2, "tuple (lower, upper) for TuneInt"
-        assert scope[0] < scope[1], "invalid scope range"
-        assert all(isinstance(x, int) for x in scope), "only integer accepted"
-        self.lower = int(scope[0])
-        self.upper = int(scope[1])
+        if (not isinstance(scope[0], VarNode)) and \
+            (not isinstance(scope[1], VarNode)):
+            assert scope[0] < scope[1], "invalid scope range"
+            assert all(isinstance(x, int) for x in scope), \
+                "only integer accepted"
+            scope = (int(scope[0]), int(scope[1]))
+        self.lower, self.upper = scope
 
 
 class TuneEnum(TuneBase):

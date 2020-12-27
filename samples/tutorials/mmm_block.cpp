@@ -1,11 +1,14 @@
 #include <stdio.h>
 #include <cstdlib>
+#include <uptune.h>
 
 #define N 100
+using namespace ut;
 
 int main(int argc, const char** argv)
 {
 
+  int BLOCK_SIZE = tune(8, {0, 20}, "size");
   int n = BLOCK_SIZE * (N/BLOCK_SIZE);
   int a[N][N];
   int b[N][N];

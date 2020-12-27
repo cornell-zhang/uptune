@@ -15,6 +15,8 @@ all_by_module = {
     ],
     "uptune.add.constraint": [
         "constraint",
+        "register",
+        "rule",
     ],
     "uptune.template.tuneapi": [
         "tune",
@@ -35,6 +37,9 @@ all_by_module = {
         "train",
         "test"
     ],
+    "uptune.tuners.tuner": [
+        "model",
+    ],
 }
 
 default_settings = {
@@ -48,6 +53,14 @@ default_settings = {
     "training-data"   : "",
     "online-training" : 1,
 }
+
+# Overide the shared register var dict
+class proxy_dict(object):
+    def __init__(self, vars):
+        self.vars = vars
+    def __getattr__(self, key):
+        assert key in self.vars
+        return self.vars[key]
 
 # objs to module name mapping
 object_origins = {}
@@ -77,8 +90,8 @@ class module(ModuleType):
             return getattr(module, name)
 
         # return registered var node object
-        elif name in constraint.VarNode.nodes.keys():
-            return constraint.VarNode.nodes[name] 
+        elif name == "vars":
+            return proxy_dict(constraint.VarNode.nodes)
 
         # ut.var returns 0 in default mode 
         ModuleType.__getattribute__(self, name)

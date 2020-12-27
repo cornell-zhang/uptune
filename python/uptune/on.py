@@ -40,7 +40,7 @@ def main():
 
     if mode == "single":   
         print("[ INFO ] Single-stage({}), {}".format(tune_mode, config_str)) 
-        controller.main(template=tpl)
+        controller.async_execute(template=tpl)
 
     elif mode == "multi-stage":    
         print("[ INFO ] Multi-stage({}), {}".format(tune_mode, config_str)) 

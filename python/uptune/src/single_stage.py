@@ -44,8 +44,8 @@ def single_run_builder(cmd, timeout):
         # Format [ index, {co-variates}, eval_time, QoR ]
         try: 
             log_file = "ut-qor-stage-0.json"
-            assert os.path.isfile(log_file), "[ FATAL ] QoR log {} not found on node #{}. ".\
-                    format(log_file, self.index)
+            assert os.path.isfile(log_file), "[ FATAL ] QoR log {} not found on node #{}. " \
+                " cmd - {}. \n {}".format(log_file, self.index, cmd, self.stderr)
         
             # Read the last (latest measurement QoR)
             with open(log_file, 'r') as fp:

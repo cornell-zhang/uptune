@@ -86,11 +86,10 @@ class TuningRunManager(tuningrunmain.TuningRunMain):
 
   def sync(self, global_results):
     """
-    synchronize the data between different nodes (epoch-wise) 
+    Synchronize the data between different nodes (epoch-wise) 
     claim desired results and report with build-in APIs
     """
     for gr in global_results:
-
       config = self.search_driver.get_configuration(gr.data) 
       dr = DesiredResult(configuration=config,
                          requestor=gr.technique,

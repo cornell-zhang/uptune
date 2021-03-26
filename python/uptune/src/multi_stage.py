@@ -1,8 +1,6 @@
 import numpy as np
 import pandas as pd
 import sys, os, re, ray, json, random, logging, time
-# from multiprocessing.pool import ThreadPool
-# from uptune.api import ParallelTuning, RunProgram
 from uptune.opentuner.resultsdb.models import Result
 
 log = logging.getLogger(__name__)
@@ -27,7 +25,7 @@ def score(self, features):
 def mab(self): 
     """ pure opentuner version """
     total, ratio = 10, 1
-    for epoch in range(self._limit):
+    for epoch in range(self.search_limit):
 
         drpool, idxpool = list(), list()
         while len(drpool) < total:
@@ -68,14 +66,14 @@ def multirun(self, template=False):
 
     # run trails 3*pf. randomly pick p from 1.5*pf
     total, ratio = 6, 0.5
-    split = int(total * ratio * self._parallel)
+    split = int(total * ratio * self.parallel)
     arch_path = "../archive.csv"
     start_time = time.time()
 
-    for epoch in range(self._limit):
+    for epoch in range(self.search_limit):
         # generated pending-status dr
         drpool, idxpool = list(), list()
-        while len(drpool) < total * self._parallel:
+        while len(drpool) < total * self.parallel:
             drs, idxs = self.generate_dr() 
             drpool += drs
             idxpool += idxs
@@ -83,8 +81,8 @@ def multirun(self, template=False):
         # generate features/scores into pool
         scores, ftpool = list(), list() 
         for index in range(total):
-            start = self._parallel * index
-            end   = start + self._parallel
+            start = self.parallel * index
+            end   = start + self.parallel
             drs = drpool[start : end]  
 
             if not template: # dtribute drs across nodes
@@ -93,7 +91,7 @@ def multirun(self, template=False):
                           for actor in self._actors]
 
             # deprecated: push cfgs into zmq
-            # pool = ThreadPool(processes=self._parallel)
+            # pool = ThreadPool(processes=self.parallel)
             # res = pool.apply_async(ray.get, (objects,))
             # if not template: # dtribute drs across nodes
             #     self.publish(drs, stage=0)
@@ -116,7 +114,7 @@ def multirun(self, template=False):
                                        ('feature', list), 
                                        ('pred', float)])
         ranking = array # np.sort(array, order = 'pred')
-        idx = random.sample(range(split, len(ranking)), self._parallel) 
+        idx = random.sample(range(split, len(ranking)), self.parallel) 
 
         # create drs/mapping to node api and validate
         drs = [item[1] for item in ranking[idx]]
@@ -143,11 +141,11 @@ def multirun(self, template=False):
 
         # save validation qors to archive.csv
         elapsed_time = time.time() - start_time
-        base = epoch * self._parallel 
+        base = epoch * self.parallel 
         for qor in qors: 
             index = base + qors.index(qor)
             if self._prev: index = index + self._prev + 1
-            is_best = 1 if qor == self._best[0] else 0
+            is_best = 1 if qor == self.best_qors[0] else 0
             df = pd.DataFrame({"time" : elapsed_time, 
                                "qor" : qor, "is_best" : is_best}, 
                                columns=["time", "qor", "is_best"],
@@ -190,7 +188,7 @@ def multi_run_builder(cmd, timeout):
         # evaluation
         if phase == "pre":
             exception_ret = None 
-            res_fname = "feats.json"
+            res_fname = "ut.features.json"
             expected_type = list
             sample = True
 

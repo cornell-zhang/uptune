@@ -1,7 +1,6 @@
 #! /usr/bin/env python
 import sys
 import os
-import cmd
 import uptune
 import datetime
 from uptune.src.codegen import codegen
@@ -12,10 +11,9 @@ def main():
         print("Usage: \"python -m uptune.on script [--args] ")
         sys.exit(2)
 
-    mainpyfile =  sys.argv[2] if sys.argv[1] == 'python' else sys.argv[1]
+    mainpyfile = sys.argv[2] if sys.argv[1] == 'python' else sys.argv[1]
     if not os.path.exists(mainpyfile):
-        print('Error:', mainpyfile, 'does not exist')
-        sys.exit(1)
+        raise RuntimeError(f"{mainpyfile} does not exist")
 
     # Remove uptune.on from argument list
     del sys.argv[0] 
@@ -30,7 +28,9 @@ def main():
     # Initialize controller and launch the tuning tasks
     workdir = os.path.abspath(os.getcwd())
     os.environ["UT_WORK_DIR"] = workdir
-    print("[ INFO ] Uptune work directory {}".format(workdir))
+    os.environ["UT_TEMP_DIR"] = os.path.join(workdir, "ut.temp")
+
+    print(f"[  INFO  ] UT_WORK_DIR: {workdir}")
     controller, mode, tpl = codegen(mainpyfile, args, command)
     tune_mode = "intrusive" if not tpl else "directive"
     config_str = "threads({}), test-limit({}), timeout({}), build-timeout({})".\
@@ -39,16 +39,16 @@ def main():
                str(datetime.timedelta(seconds=args.runtime_limit)))
 
     if mode == "single":   
-        print("[ INFO ] Single-stage({}), {}".format(tune_mode, config_str)) 
+        print(f"[  INFO  ] Single-stage({tune_mode}), {config_str}") 
         controller.async_execute(template=tpl)
 
     elif mode == "multi-stage":    
-        print("[ INFO ] Multi-stage({}), {}".format(tune_mode, config_str)) 
+        print(f"[  INFO  ] Multi-stage({tune_mode}), {config_str}") 
         controller.multirun(template=tpl)
 
     elif mode == "decouple": 
         assert tune_mode == "intrusive"
-        print("[ INFO ] Auto-decoupling({}), {}".format(tune_mode, config_str)) 
+        print(f"[  INFO  ] Auto-decoupling({tune_mode}), {config_str}") 
         controller.decouple()
     
 if __name__ == '__main__':

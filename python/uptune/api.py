@@ -554,10 +554,12 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 rets = np.array(local_results)
                 eval_times = np.array(local_build_times)
 
-                print("=================")
-                local_worst = np.nanmax(rets[rets != np.inf])
-                print("=================")
-                local_best  = np.nanmin(rets[rets != np.inf])
+                try:
+                    local_worst = np.nanmax(rets[rets != np.inf])
+                    local_best  = np.nanmin(rets[rets != np.inf])
+                except:
+                    local_best = float("inf")
+                    local_worst = float("inf")
                 max_build_time = np.nanmax(eval_times[eval_times != np.inf])
 
                 global_best = self.best_qors[0] if self.best_qors else local_best

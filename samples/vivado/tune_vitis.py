@@ -110,9 +110,9 @@ def main(parse_only=False):
     # We just copy the rpt to separate folder
     if os.getenv("UT_TUNE_START"):        
         index = ut.get_global_id()
-        work_path = os.path.join(ut.get_meta_data("UT_WORK_DIR"), "ut-work-dir")
+        work_path = os.path.join(ut.get_meta_data("UT_WORK_DIR"), "ut.temp")
 
-    index = "ut-rpt-{}".format(index)
+    index = "ut.rpt.{}".format(index)
     rpt_folder = os.path.join(work_path, str(index))
 
     cmd = "mkdir -p {}; cp build_dir.hw.xilinx_u280_xdma_201920_1/reports/link/imp/* {}"\

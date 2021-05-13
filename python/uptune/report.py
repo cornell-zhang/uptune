@@ -7,9 +7,12 @@ from uptune.add import constraint, features
 # Get the global id of measurement
 def get_global_id():
     if os.getenv("UT_TUNE_START"):
-        assert os.getenv("UT_MEASURE_NUM")
-        assert os.getenv("UT_CURR_INDEX")
-        return int(os.getenv("UT_CURR_INDEX")) + int(os.getenv("UT_MEASURE_NUM"))
+        assert os.getenv("UT_GLOBAL_ID")
+        return int(os.getenv("UT_GLOBAL_ID")) 
+    else:
+        msg = "Program opt not running. No metadata available."
+        print(f"[ INFO ] {msg}")
+        return "base"
 
 # Get index in a local thread group
 def get_local_id():
@@ -22,6 +25,12 @@ def get_meta_data(key):
     if os.getenv("UT_TUNE_START"):
         assert os.getenv(key)    
         return os.getenv(key)
+    else:
+        msg = "Program opt not running. No metadata available."
+        if key == "UT_WORK_DIR":
+            return os.getcwd()
+        else:
+            raise RuntimeError(msg)
 
 def save(objective='min'):
     def decorator(function):
@@ -36,24 +45,24 @@ def save(objective='min'):
 def target(val, objective="min", tuner=None):
 
     assert isinstance(val, (int, float)), \
-           "The feedback must be of real-value data type"
+           "The QoR must be a real-value data"
     assert objective in ['max', 'min'], \
-           "The objective should be either 'min' or 'max'"
+           "The Objective should be either 'min' or 'max'"
 
-    # Generate
+    # Store the running
     if os.getenv("UT_BEFORE_RUN_PROFILE"):
-        update('ut-qor-default.json', [val, objective])
+        update('ut.default_qor.json', [val, objective])
 
         # Generate JSON as params LUT for intrusive tuning
         # Clean up the params record after hitting the break-points
         if not os.path.isfile('template.tpl'):
-            update('ut-tune-params.json', types.TuneBase.params)
+            update('ut.params.json', types.TuneBase.params)
             types.TuneBase.params = []
 
     elif os.getenv("UT_TUNE_START"): 
         # In template (non-intrusive) mode
         if len(types.TuneBase.params) == 0:    
-            qor_log_file = "ut-qor-stage-0.json"
+            qor_log_file = "ut.qor_stage0.json"
             update(qor_log_file, [-1, val, objective])
 
         # For multi-stage tuning, the ut.target API serves 
@@ -64,7 +73,7 @@ def target(val, objective="min", tuner=None):
                 "The break-point is set in the wrong place. Expected stage {}".format(stage)
 
             if types.TuneBase.stage == stage:
-                qor_log_file = "ut-qor-stage-{}.json".format(stage)
+                qor_log_file = "ut.qor_stage{}.json".format(stage)
                 update(qor_log_file, [types.TuneBase.index, val, objective])
                 print("[ INFO ] program exits at stage {}. Update target QoR to {}".format(stage, val))
                 sys.exit(0)
@@ -80,11 +89,11 @@ def interm(features, shape=None):
 
     # Create JSON file for features 
     if os.getenv("UT_BEFORE_RUN_PROFILE"):
-        update('feats.json', [-1, features])
+        update('ut.features.json', [-1, features])
 
     else: 
-        os.system('rm feats.json') 
-        update('feats.json', [types.TuneBase.index, features])
+        os.system('rm ut.features.json') 
+        update('ut.features.json', [types.TuneBase.index, features])
 
         # Perform sampling in multi-stage tuning 
         # the ut.interm serves as the break-points

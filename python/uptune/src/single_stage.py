@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 class Controller(ParallelTuning):
     def __init__(self, cls, args, *pargs, **kwargs): 
         super(Controller, self).__init__(cls, args, *pargs, **kwargs)
-        self.before_run(copy=True)
+        self.prepare_workdir(copy=True)
 
 def single_run_builder(cmd, timeout):
     entry = cmd.split()[0]
@@ -18,8 +18,10 @@ def single_run_builder(cmd, timeout):
     # TODO: generate multifiles from tmpl
     filename = cmd.split()[1]
 
-    def run(self, dr):
+    def run(self, dr, global_id):
         self.start_run()
+        self.set_global_id(global_id)
+
         # dump dr into tmpl for executable script
         if os.path.isfile('template.tpl'):
             self.dumper.codegen(self.index, dr, filename)
@@ -35,7 +37,7 @@ def single_run_builder(cmd, timeout):
                              "node %d, error msg: %s", \
                              self.index, result['stderr'].decode('utf-8'))
                 if not result['stderr'].decode('utf-8'):
-                    log.warning("current runtime limit is %d. " + \
+                    log.warning("Current runtime limit is %d. " + \
                                 "consider increase with -rt option", timeout)
             pair = [ self.index, {}, eval_time, float('inf') ]
 
@@ -43,7 +45,7 @@ def single_run_builder(cmd, timeout):
         # back to central controller 
         # Format [ index, {co-variates}, eval_time, QoR ]
         try: 
-            log_file = "ut-qor-stage-0.json"
+            log_file = "ut.qor_stage0.json"
             assert os.path.isfile(log_file), "[ FATAL ] QoR log {} not found on node #{}. " \
                 " cmd - {}. \n {}".format(log_file, self.index, cmd, self.stderr)
         
@@ -57,7 +59,7 @@ def single_run_builder(cmd, timeout):
                res = (-1.0) * res
 
             # Collect registered values (co-variates that can be used in causal analysis)
-            covars_log = "ut-features-covars.json"
+            covars_log = "ut.features_covars.json"
             covars = dict()
             if os.path.isfile(covars_log):
                 f = open(covars_log, 'r')
@@ -66,12 +68,15 @@ def single_run_builder(cmd, timeout):
             pair = [ index, covars, eval_time, res ]
 
         except Exception as e:
-            log.warning("parse data failure on node %d, \
-                         return inf. %s", self.index, e.message)
+            msg = f"Parse data failure on node {self.index}"
+            msg += ". Check output log for details"
+            log.warning(msg)
             pair = [ self.index, {}, eval_time, float('inf') ]
 
         open("finish.out", 'a').close()
         self.end_run() 
+
+        pair.insert(0, self.global_id)
         return pair
 
     return run

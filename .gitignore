@@ -28,7 +28,7 @@ share/python-wheels/
 MANIFEST
 
 # Temporary
-ut-*
+ut.*
 
 # Compilation temp
 *.aoc*

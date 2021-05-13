@@ -8,7 +8,7 @@ import numpy as np
 import abc, argparse, json, os, ray, logging
 import threading, time, subprocess, copy, sys, signal
 
-from uptune.src.prog_template import JinjaParser
+from uptune.src.template import JinjaParser
 from uptune.opentuner.api import TuningRunManager
 from uptune.opentuner.measurement import MeasurementInterface
 from uptune.opentuner.resultsdb.models import Result
@@ -30,7 +30,7 @@ argparser.add_argument('--async-interval', '-it', type=int, default=300,
                        help="interval in seconds for async scheduler to check the task queue")
 argparser.add_argument('--parallel-factor', '-pf', type=int, default=2,
                        help="number of processes spawned by Parallel Python")
-argparser.add_argument('--params-json', '-params', type=str, default="",
+argparser.add_argument('--params', '-params', type=str, default="",
                        help="search space definition in json")
 argparser.add_argument('--learning-models', '-lm', action="append", default=[],
                        help="single or ensemble of learning models for space pruning")
@@ -57,9 +57,9 @@ def init(apply_best=False): # reset uptune env variables
 
 # run with the best 
 def get_best():
-    assert os.path.isfile("ut-work-dir/best.json"), \
+    assert os.path.isfile("ut.temp/best.json"), \
            "best cfg does not exsit"
-    with open("ut-work-dir/best.json", "r") as fp:
+    with open("ut.temp/best.json", "r") as fp:
         cfg, res = json.load(fp)
     fp.close()
     return cfg, res
@@ -74,11 +74,13 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
   
         self.cls         = cls                     # ray actor class 
         self.args        = args                    # arguments for control
-        self._parallel   = args.parallel_factor    # num of parallel instances 
-        self._nodes      = tuple(node.split(','))
-        self._limit      = args.test_limit 
-        self._best       = list()
-        self._cfg        = None
+        self.parallel    = args.parallel_factor    # num of parallel instances 
+        self.search_limit = args.test_limit 
+        self.best_qors   = list()
+        self.best_config = None
+        self.tempdir     = "ut.temp"
+        self.history     = "../ut.archive.csv"
+
         self._pending    = list()                  # pending configs being validated
         self._prev       = False                   # whether recovering from history 
         self._valid      = False                   # whether pruning is enabled
@@ -92,38 +94,33 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         self._glbsession = list()
   
     def init(self): 
-        path = 'ut-work-dir/uptune.db'
+        path = f"{self.tempdir}/uptune.db"
         if not os.path.isdir(path):
             os.makedirs(path, exist_ok=True)
         if self.args.database == None:
-            self.args.database = 'sqlite:///ut-work-dir/global-'
+            self.args.database = f"sqlite:///{self.tempdir}/global"
   
-    # After program dynamic analysis
-    def before_run(self, copy=False):
-        with open(self.args.params_json) as f:
-            self._params = json.load(f)
-
+    # Switch to ut.temp workdir and create symbolic links
+    def prepare_workdir(self, copy=False):
+        with open(self.args.params) as f:
+            self.params = json.load(f)
         # If not reusing the parameters JSON
         # from last run, then move the params JSON into workdir
-        if os.path.isfile("ut-tune-params.json"):
-            os.system("mv ut-*.json ut-work-dir/")
+        if os.path.isfile("ut.params.json"):
+            os.system("mv ut.*.json ut.temp/")
 
-        # create symbolic links
-        # print("[ INFO ] Creating work folders...")
+        # Create symbolic links
         work_dir = os.getenv("UT_WORK_DIR")
-        for idx in range(self._parallel):
-            thread_dir = "ut-work-dir/{}".format(str(idx))
-            os.system("mkdir -p {} > /dev/null".format(thread_dir))
-            os.chdir("{}".format(thread_dir))
+        for idx in range(self.parallel):
+            thread_dir = f"{self.tempdir}/temp.{idx}"
+            os.system(f"mkdir -p {thread_dir} > /dev/null")
+            os.chdir(f"{thread_dir}")
+
             for f in os.listdir(work_dir):
-                if not f.startswith("ut-"):
-                    os.system("ln -s {}/{} .".format(work_dir, f))
+                if not f.startswith("ut."):
+                    os.system(f"ln -s {work_dir}/{f} .")
             os.chdir(work_dir)
-
-        # clean and move to ut-work-dir
-        os.chdir('ut-work-dir')
-
-        # init ray cluster 
+        os.chdir(self.tempdir)
         # ray.init(redis_address="localhost:6379")
         ray.init(logging_level=logging.FATAL)
   
@@ -144,10 +141,10 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
   
   
     def global_report(self, stage, epoch, api, node, cfg, requestor, result, flag=False):
-        if result < self._best[stage] or self._best[stage] == None:
-            self._best[stage] = result
+        if result < self.best_qors[stage] or self.best_qors[stage] == None:
+            self.best_qors[stage] = result
             if stage == 0: # save best cfg
-                self._cfg = cfg
+                self.best_config = cfg
                 with open("best.json", "w") as fp:
                     json.dump([cfg, result], fp)
             flag = True
@@ -181,7 +178,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
   
     def create_params(self, stage=0):
         manipulator = ConfigurationManipulator()
-        for item in self._params[stage]:
+        for item in self.params[stage]:
             ptype, pname, prange = item
             if ptype == "IntegerParameter": 
                 manipulator.add_parameter(IntegerParameter(pname, prange[0], prange[1]))
@@ -201,6 +198,11 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             else: assert False, "unrecognized type " + ptype
         return manipulator
            
+    def tempdir(self, name):
+        self.temp = "ut.temp"
+        if not os.path.exists(self.temp):
+            os.mkdir(self.temp)
+        return os.path.join(self.temp, name)
   
     # Program executor for profiling before tuning 
     def call_program(self, cmd, limit=None, memory_limit=None):
@@ -218,8 +220,9 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
 
         # save the log for debugging
         def target():
-            out_log = "ut-profile.log"
-            err_log = "ut-profile.err"
+            out_log = os.path.join(self.tempdir, "ut.profile.log")
+            err_log = os.path.join(self.tempdir, "ut.profile.err")
+
             file_out = open(out_log, "w")
             file_err = open(err_log, "w")
             self.process = subprocess.Popen(
@@ -258,10 +261,10 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         if q == None:
             # TODO: fix or remove sql-alchemy
             # Check the pandas dataframes
-            arch_path = "../ut-archive.csv"
-            if os.path.exists(arch_path):
-                keys = [ item[1] for item in self._params[0] ]
-                df = pd.read_csv(arch_path)
+            if os.path.exists(self.history):
+                keys = [ item[1] for item in self.params[0] ]
+                df = pd.read_csv(self.history)
+
                 check = [ df[k]==v for k, v in cfg.items() ]
                 dup = check.pop()
                 while len(check) > 0:
@@ -290,7 +293,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         if len(model_list) > 0: 
             self._valid = True
   
-            for item in self._params[stage]:
+            for item in self.params[stage]:
                 ptype, pname, prange = item
                 if ptype == "EnumParameter": 
                    self._mapping[pname] = dict([(y,x+1) for x,y \
@@ -323,24 +326,22 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         else: return False
   
     def resume(self):
-        # recover the decoded pattern
-        arch_path = '../ut-archive.csv'
-         
-        if os.path.isfile(arch_path):
+        # Recover the decoded pattern
+        if os.path.isfile(self.history):
             print("[ INFO ] Found history records. Trying to re-load the search records...")
-            data = pd.read_csv(arch_path)
+            data = pd.read_csv(self.history)
 
             # Check if the archive is for this tuning task 
-            cols = [ _[1] for _ in self._params[0] ]
+            cols = [ _[1] for _ in self.params[0] ]
             if not set(cols).issubset(set(data.columns)):
                  log.info('archive mismatch. delete archive') 
-                 os.system('rm ' + arch_path)
+                 os.system('rm ' + self.history)
                  return False
 
             columns = data.columns[1:-1]
             for col in columns:
                 if col in self._mapping:
-                    cands = [item[-1] for item in self._params[0] if item[1] == col][0]
+                    cands = [item[-1] for item in self.params[0] if item[1] == col][0]
                     mapping = dict([(i+1, cands[i]) for i in range(len(cands))])
                     data[col].replace(mapping, inplace=True)
 
@@ -355,7 +356,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             # Report datas to global database
             for d in data.values: 
                 d = d[1:-1]; qor = float(d[-1])
-                cfg = dict([(columns[i], convert(d[i])) for i in range(len(self._params[0]))])
+                cfg = dict([(columns[i], convert(d[i])) for i in range(len(self.params[0]))])
                 self.global_report(0, 0, self._apis[0], 0, cfg, 'seed', qor)
 
             self._prev = len(data.values) - 1
@@ -397,11 +398,12 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
     # Async task scheduler
     def async_execute(self, template=False):
         self._apis = [self.create_tuning(x, 0, self.create_params()) 
-                          for x in range(self._parallel)]
+                          for x in range(self.parallel)]
   
         # Create ray actors
         actors = []
-        for p in range(self._parallel):
+        for p in range(self.parallel):
+
             name = "uptune_actor_p{}".format(p)
             actor = self.cls.options(name=name).remote(p, 0, self.args) 
             actors.append(actor)
@@ -412,8 +414,14 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         # restore history search result
         prev = self.resume()
         start_time = time.time() 
+
+        # the trials that have been validated
         trial_num = 0
+        # all the trails (including running ones)
+        global_id_base = 0
+        # accumulate validation qors and report
         new_qor_count = 0
+        # lists saving local validation qors
         local_results = []
         local_build_times = []
 
@@ -440,30 +448,39 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         # distribute desired results across nodes
         # check the task queue every a few mins
         not_reach_limit = True
-        free_task_list = [ _ for _ in range(self._parallel) ]
-        keys = [ item[1] for item in self._params[0] ]
-        arch_path = "../ut-archive.csv"
+        free_task_list = [ _ for _ in range(self.parallel) ]
+        keys = [ item[1] for item in self.params[0] ]
+
 
         # objects list saves the pending tasks
         objects = list()
         drs = dict()
         while not_reach_limit:
-            # Prepare inputs 
+            # Prepare inputs for free threads
+
             # The new desired result will overwrite the old ones
             drs = get_config(free_task_list, drs)
             if not template: 
                 measure_num = trial_num
                 if self._prev and trial_num == 0: 
                     measure_num += (self._prev + 1)
+                    global_id_base += (self._prev + 1)
+
+                # Prepare meta-data for searching instances
+                # Each thread should be assigned with a new global ID
                 meta = {"UT_MEASURE_NUM": measure_num, 
-                        "UT_WORK_DIR":    os.path.abspath("../")}
+                        "UT_WORK_DIR": os.path.abspath("../"),
+                        "UT_TEMP_DIR": os.path.abspath("../ut.temp")}
                 self.publish(drs, stage=0, meta=meta)
+
             # Invoke remote executors
             for index in free_task_list:
-                print("[ DEBUG ] dispatch new task on node {}: {}"\
-                    .format(index, str(drs[index].configuration.data)))
-                obj = actors[index].run.remote(drs[index]) 
+                target_config = drs[index].configuration.data
+                print(f"[ DEBUG ] GID({global_id_base}) dispatch new task on node {index}: {target_config}")
+                obj = actors[index].run.remote(drs[index], global_id_base) 
                 objects.append(obj)
+                global_id_base += 1
+
             free_task_list = []
 
             # List of QoRs returned from the raylet runners
@@ -475,19 +492,21 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 print("[ DEBUG ] Checking wait time", len(qors), self._interval)
                 if (len(qors) > 0):
                     new_qor_count += len(qors)
-                    results, covars, eval_times = [], [], []
+                    results, covars, eval_times, gids = [], [], [], []
                     for qor in qors:
-                        index, covar_list, eval_time, target = ray.get(qor)
-                        print("[ DEBUG ] Free node {}".format(index))
+                        gid, index, covar_list, eval_time, target = ray.get(qor)
+                        print(f"[ DEBUG ] Free node #{index} (GID{gid})")
                         free_task_list.append(index)
                         eval_times.append(eval_time)
                         results.append(target)
                         covars.append(covar_list)
-                        # local result logging
+                        gids.append(gid)
+
+                        # Local result logging
                         local_results.append(target)
                         local_build_times.append(eval_time)
 
-                    # report and synchronize between apis
+                    # Report and synchronize between apis
                     results = [ Result(time=target) for target in results ]
                     count = 0
                     global_results_sync = dict()
@@ -497,6 +516,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                         result = results[count]
                         build_time = eval_times[count]
                         covar = covars[count]
+                        gid = gids[count]
 
                         api.report_result(dr, result)
                         gr = self.global_report(0, trial_num, api, index, 
@@ -512,14 +532,14 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                         # Check whether prev result exist
                         if self._prev and trial_num == 0: 
                             trial_num = trial_num + self._prev + 1
-                        is_best = 1 if result.time == self._best[0] else 0
-                        df = pd.DataFrame({"time" : elapsed_time, **vals, **covar, 
+                        is_best = 1 if result.time == self.best_qors[0] else 0
+                        df = pd.DataFrame({"gid": gid, "time" : elapsed_time, **vals, **covar, 
                                            "build_time" : build_time,
                                            "qor" : result.time, "is_best" : is_best}, 
-                                           columns=["time", *keys, *covar.keys(), "build_time", "qor", "is_best"],
+                                           columns=["gid", "time", *keys, *covar.keys(), "build_time", "qor", "is_best"],
                                            index=[trial_num])
-                        header = ["time", *keys, *covar.keys(), "build_time", "qor", "is_best"]
-                        df.to_csv(arch_path, mode='a', index=False, 
+                        header = ["gid", "time", *keys, *covar.keys(), "build_time", "qor", "is_best"]
+                        df.to_csv(self.history, mode='a', index=False, 
                                   header=False if trial_num > 0 else header)
                         trial_num += 1
                         count += 1
@@ -533,47 +553,52 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                             api_count += 1
                     break
 
-            # report local result every self._parallel qors return
-            if new_qor_count >= self._parallel:
+            # report local result every self.parallel qors return
+            if new_qor_count >= self.parallel:
                 new_qor_count = 0
                 rets = np.array(local_results)
                 eval_times = np.array(local_build_times)
 
-                local_worst = np.nanmax(rets[rets != np.inf])
-                local_best  = np.nanmin(rets[rets != np.inf])
+                try:
+                    local_worst = np.nanmax(rets[rets != np.inf])
+                    local_best  = np.nanmin(rets[rets != np.inf])
+                except:
+                    local_best = float("inf")
+                    local_worst = float("inf")
                 max_build_time = np.nanmax(eval_times[eval_times != np.inf])
-                global_best = self._best[0] if self._best else local_best
+
+                global_best = self.best_qors[0] if self.best_qors else local_best
                 if local_best < global_best: global_best = local_best
 
                 print("[ INFO ] {}(#{}/{})".\
                         format(str(datetime.timedelta(seconds=int(elapsed_time))),
-                            trial_num, self._limit) + \
+                            trial_num, self.search_limit) + \
                     " - QoR LW({:05.2f})/LB({:05.2f})/GB({:05.2f}) - build time({:05.2f}s)".\
                         format(local_worst, local_best, global_best, max_build_time))
                 local_results = []
                 local_build_times = []
                 
             elapsed_time = time.time() - start_time
-            if trial_num > self._limit: 
-                print(trail, self._limit)
+            if trial_num > self.search_limit: 
+                print(trail, self.search_limit)
                 not_reach_limit = False
             if elapsed_time > float(self.args.timeout): 
                 not_reach_limit = False
                 print(elapsed_time)
             if not_reach_limit == False:
-                print("[ INFO ] Search ends. Global best {}".format(self._best[0]))
+                print("[ INFO ] Search ends. Global best {}".format(self.best_qors[0]))
 
         # End of execution 
         for api in self._apis:
             api.finish()
-        return self._cfg        
+        return self.best_config        
   
     def main(self, template=False):
         self._apis = [self.create_tuning(x, 0, self.create_params()) 
-                          for x in range(self._parallel)]
+                          for x in range(self.parallel)]
         # Create ray actors
         actors = []
-        for p in range(self._parallel):
+        for p in range(self.parallel):
             name = "uptune_actor_p{}".format(p)
             actor = self.cls.options(name=name).remote(p, 0, self.args) 
             actors.append(actor)
@@ -586,7 +611,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         start_time = time.time() 
 
         # the main searching loop
-        for epoch in range(self._limit):
+        for epoch in range(self.search_limit):
             drs, cfgs = list(), list()
             for api in self._apis:
                 desired_result = None
@@ -607,11 +632,11 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             
             # assert and run in parallel with ray remote
             # truncate = lambda x: x + "..." if len(x) > 75 else x
-            assert len(cfgs) == self._parallel, \
+            assert len(cfgs) == self.parallel, \
                 "All available cfgs have been explored"
 
             # distribute desired results across nodes
-            base = epoch * self._parallel 
+            base = epoch * self.parallel 
             if not template: 
                 measure_num = base
                 if self._prev: measure_num += (self._prev + 1)
@@ -628,7 +653,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             # Check the executor pool periodically (5 mins)
             interval = 5 * 60
             qors, not_ready_refs = ray.wait(objects, 
-                num_returns=self._parallel, timeout=self.args.runtime_limit)
+                num_returns=self.parallel, timeout=self.args.runtime_limit)
 
             # Dispatch the tasks asynchronously 
             results, covars, eval_times = [], [], []
@@ -654,24 +679,22 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                     covars.append({})                   
   
             elapsed_time = time.time() - start_time
-            arch_path = "../ut-archive.csv"
-
             rets = np.array(results)
             eval_times = np.array(eval_times)
 
             local_worst = np.nanmax(rets[rets != np.inf])
             local_best  = np.nanmin(rets[rets != np.inf])
             max_build_time = np.nanmax(eval_times[eval_times != np.inf])
-            global_best = self._best[0] if self._best else local_best
+            global_best = self.best_qors[0] if self.best_qors else local_best
             if local_best < global_best: global_best = local_best
             
             print("[ INFO ] {}(#{}/{})".\
                     format(str(datetime.timedelta(seconds=int(elapsed_time))),
-                        epoch * self._parallel, self._limit) + \
+                        epoch * self.parallel, self.search_limit) + \
                 " - QoR LW({:05.2f})/LB({:05.2f})/GB({:05.2f}) - build time({:05.2f}s)".\
                     format(local_worst, local_best, global_best, max_build_time))
 
-            keys = [ item[1] for item in self._params[0] ]
+            keys = [ item[1] for item in self.params[0] ]
             results = [ Result(time=target) for target in results ]
 
             for api, dr, covar, build_time, result \
@@ -689,14 +712,14 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
                 
                 # Check whether prev result exist
                 if self._prev: index = index + self._prev + 1
-                is_best = 1 if result.time == self._best[0] else 0
+                is_best = 1 if result.time == self.best_qors[0] else 0
                 df = pd.DataFrame({"time" : elapsed_time, **vals, **covar, 
                                    "build_time" : build_time,
                                    "qor" : result.time, "is_best" : is_best}, 
                                    columns=["time", *keys, *covar.keys(), "build_time", "qor", "is_best"],
                                    index=[index])
                 header = ["time", *keys, *covar.keys(), "build_time", "qor", "is_best"]
-                df.to_csv(arch_path, mode='a', index=False, 
+                df.to_csv(self.history, mode='a', index=False, 
                           header=False if index > 0 else header)
   
             for api in self._apis: # sync across nodes
@@ -712,7 +735,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             if elapsed_time > float(self.args.timeout): 
                 log.info('%s runtime exceeds timeout %ds. global_best is %f', 
                              str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                             int(elapsed_time), self._best[0])
+                             int(elapsed_time), self.best_qors[0])
                 break 
   
         # End of execution 
@@ -721,25 +744,25 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
 
         log.info('%s tuning complete. global_best is %f', 
                      str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                     self._best[0] if self._best else float('inf'))
-        return self._cfg
+                     self.best_qors[0] if self.best_qors else float('inf'))
+        return self.best_config
 
 
     # Fine-grained auto-tuning control 
     def set_actor_cls(self, actor):
-        """ set actor cls from builder and tmpl """
+        """ Set actor cls from builder and tmpl """
         self.cls = actor
 
     def create_instances(self):
-        """ create single-stage api controller, ray actors and ML model instances"""
+        """ Create single-stage api controller, ray actors and ML model instances"""
         self._actors = [self.cls.remote(_, 0, self.args) 
-                            for _ in range(self._parallel)]
+                            for _ in range(self.parallel)]
         self._apis = [self.create_tuning(x, 0, self.create_params()) 
-                          for x in range(self._parallel)]
+                          for x in range(self.parallel)]
         self._models = self.training(self.args.learning_models) 
 
     def finish_tuning(self):
-        """ return best cfg """
+        """ Return best configuration """
         best_cfgs = [api.get_best_configuration() for api in self._apis]
         for api in self._apis:
             try: api.finish()
@@ -747,7 +770,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         return best_cfgs
         
     def generate_dr(self): 
-        """ singe-stage generate desired result """
+        """ Singe-stage generate desired result """
         drs, idxs = list(), list()
         for api in self._apis:
             desired_result = api.get_next_desired_result()
@@ -763,14 +786,14 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             drs.append(desired_result)
             idxs.append(self._apis.index(api))
 
-        assert len(drs) == self._parallel, \
+        assert len(drs) == self.parallel, \
                "All available cfgs have been explored"
         return drs, idxs 
 
     def rpt_and_sync(self, epoch, drs, results, mapping=None, stage=0):
         """ report and synchronize result """
         log.info('Global best qor %f', 
-            self._best[stage] if self._best is not None else float('inf'))
+            self.best_qors[stage] if self.best_qors is not None else float('inf'))
 
         idxs = tuple([mapping[_] for _ in drs]) if mapping else None
         apis = [self._apis[i] for i in idxs] if idxs else self._apis  
@@ -797,20 +820,20 @@ class RunProgram(object):
         self.index       = index             
         self.stage       = stage
         self.args        = args
+        self.global_id   = 0
         self.workpath    = None
         self.process     = None
         self.stdout      = str()
         self.stderr      = str()
         self.dumper      = JinjaParser() 
 
-    # Used before lauching tuning task through raylet
+    # Invoked by runner before starting tuning
     def start_run(self, nodes=1):
-
         # Running tuning tasks in a single-node machine
         # when running across multiple compute nodes (not sharing the same FS)
         # search instances need to find available nodes 
         if nodes == 1: 
-            self.workpath = str(self.index)
+            self.workpath = f"temp.{self.index}"
             dir_in_use = self.workpath + '-inuse'
             if not os.path.isdir(dir_in_use):
                 os.rename(self.workpath, dir_in_use)
@@ -828,6 +851,9 @@ class RunProgram(object):
         os.chdir("../")
         os.rename(self.workpath + '-inuse', self.workpath)
 
+    def set_global_id(self, global_id):
+        self.global_id = global_id
+
     def call_program(self, cmd, aws=False, sample=False, 
                      limit=None, memory_limit=None):
         kwargs = dict()
@@ -835,6 +861,7 @@ class RunProgram(object):
         subenv["UT_TUNE_START"] = "True"
         subenv["UT_CURR_INDEX"] = str(self.index)
         subenv["UT_CURR_STAGE"] = str(self.stage)
+        subenv["UT_GLOBAL_ID"]  = str(self.global_id)
 
         # early exit in multistage & aws
         if sample: subenv["UT_MULTI_STAGE_SAMPLE"] = "True"
@@ -850,10 +877,10 @@ class RunProgram(object):
         t0 = time.time()
 
         def target():
-            out_log = "out_stage{}-index{}.log".format(self.stage, self.index)
-            err_log = "err_stage{}-index{}.log".format(self.stage, self.index)
-            file_out = open(out_log, "w")
-            file_err = open(err_log, "w")
+            out_log = f"../stage{self.stage}_node{self.index}.out"
+            err_log = f"../stage{self.stage}_node{self.index}.err"
+            file_out = open(out_log, "a+")
+            file_err = open(err_log, "a+")
             self.process = subprocess.Popen(
                 cmd, stdout=file_out, stderr=file_err,
                 preexec_fn=os.setsid,
@@ -887,7 +914,7 @@ class RunProgram(object):
 class ProgramTune(ParallelTuning):
     def __init__(self, cls, args, *pargs, **kwargs):
         super(ProgramTune, self).__init__(cls, args, *pargs, **kwargs)
-        self.before_run()
+        self.prepare_workdir()
 
 
 @ray.remote

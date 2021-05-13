@@ -6,8 +6,6 @@ from matplotlib import pyplot as plt
 from multiprocessing.pool import ThreadPool
 from uptune import database
 from uptune.api import ParallelTuning, RunProgram
-# from uptune.template.pipeline import device, distribute
-# from uptune.template.pubsub import publisher
 from uptune.opentuner.resultsdb.models import Result
 from uptune.src.multi_stage import score, multirun
 
@@ -18,50 +16,55 @@ class MpiController(ParallelTuning):
         super(MpiController, self).__init__(cls, args, *pargs, **kwargs)
 
     # Perform analysis before launching tuning tasks
+    # return: true if there is ut.params.json from last search
     def analysis(self, cmd):
-        if self.args.params_json != "":
-            assert os.path.isfile(self.args.params_json)
-            print("[ INFO ] Using given params JSON {}".format(self.args.params_json))
-            for f in os.listdir("ut-work-dir"):
-                rm_list = ""
-                if not f.startswith("ut-"):
-                    rm_list += " {}".format(f)
-                os.system("cd ut-work-dir; rm -rf {}".format(rm_list))
+        if self.args.params != "":
+            assert os.path.isfile(self.args.params), self.args.params
+            print("[  INFO  ] Using given params JSON {}".format(self.args.params))
+
+            # Cleanup the temp folders
+            for f in os.listdir(self.tempdir):
+                tmpdirs = list()
+                if f.startswith("temp."):
+                    tmpdirs.append(f)
+                tmpdirs = " ".join(tmpdirs)
+                os.system(f"cd ut.temp; rm -rf {tmpdirs}")
             return True
         else:
-            print("[ INFO ] Cleaning up the legacy work folder...")
-            os.system("rm -rf ut-work-dir")
+            os.system(f"rm -rf {self.tempdir}")
+            os.mkdir(f"{self.tempdir}")
 
         # Run the program to extract search space
         entry = cmd.split()[0]
         if re.search(r'.*?\.py', entry):
             cmd = 'python ' + cmd
-    
+        print(f"[  INFO  ] DSE analysis. \"{cmd}\"")
+        
         result = self.call_program(cmd)
-        assert result['returncode'] == 0, \
-               "Input command \"{}\" failed. Error msg:\n{}".format(cmd, result['stderr'].decode('utf-8'))
-        assert os.path.isfile("ut-tune-params.json"), \
-               "{} not found in current path".format(params_record)
-        self.args.params_json = "ut-tune-params.json"
+        if result['returncode'] != 0:
+            err = result['stderr']
+            msg = f"[ WARNING ] Input command \"{cmd}\" failed. Error msg:\n{err}"
+            raise RuntimeError(msg)
+
+        self.args.params = "ut.params.json"
+        assert os.path.isfile(self.args.params), \
+            f"{self.args.params} not found in current path"
         return False
 
-
     def init_dbs(self, stage):
-        """ start zeromq device queue """
         for _ in range(stage):
             engine, Session = database.globalconnect(self.args.database + str(_) + '.db')
             self._glbsession.append(Session())
-            self._best.append(float('inf'))
+            self.best_qors.append(float('inf'))
 
     def create_apis(self):
-        """ create #stage by #parallel api matrix """
-        self._stage = len(self._params)
+        self._stage = len(self.params)
         apis = [ [self.create_tuning(p, s, self.create_params(s)) 
-                      for p in range(self._parallel)] 
+                      for p in range(self.parallel)] 
                     for s in range(self._stage)]
 
         actors = [ [self.cls.remote(p, s, self.args) 
-                        for p in range(self._parallel)]
+                        for p in range(self.parallel)]
                       for s in range(self._stage)]
 
         return apis, actors
@@ -71,8 +74,8 @@ class MpiController(ParallelTuning):
         """ select proposals from db """
         # if pool._state == 0:
         #     pool.terminate()
-        if self._cfg:
-            return self._cfg
+        if self.best_config:
+            return self.best_config
         return cfgs[0]
   
 
@@ -84,9 +87,7 @@ class MpiController(ParallelTuning):
             if desired_result is None:
                 continue
   
-            # ---------------------------
             # prune / skip / report back 
-            # ---------------------------
             while self.prune(api, stage, desired_result) == False:
                 log.warning("duplicate cfg request by %s from node %d stage %d", 
                     desired_result.requestor,
@@ -97,16 +98,16 @@ class MpiController(ParallelTuning):
             stage_drs.append(desired_result)
             stage_cfgs.append(desired_result.configuration.data)
 
-        assert len(stage_cfgs) == self._parallel, \
+        assert len(stage_cfgs) == self.parallel, \
                "All available cfgs have been explored"
         return stage_drs, stage_cfgs
 
   
     def stage_async(self, apis, actors, stage):
         """ running stage apis asyncly """
-        bound = self._limit if stage else 10000 
-        cross = stage < len(self._best) - 1
-        # pubpool = ThreadPool(processes=self._parallel)
+        bound = self.search_limit if stage else 10000 
+        cross = stage < len(self.best_qors) - 1
+        # pubpool = ThreadPool(processes=self.parallel)
 
         for epoch in range(bound):
             drs, cfgs = self.stage_dr_gen(apis, stage)
@@ -115,22 +116,16 @@ class MpiController(ParallelTuning):
 
             if cross:  # push cfg into stack
                 cfg = self.select(stage, apis, cfgs)
-                # pubpool = ThreadPool(processes=self._parallel)
+                # pubpool = ThreadPool(processes=self.parallel)
                 # [ pubpool.apply_async(publisher, (stage, _, cfg)) 
-                #      for _ in range(self._parallel) ]
+                #      for _ in range(self.parallel) ]
                 base = '__cfg__/{}-best.json' 
                 fname = base.format(stage)
                 with open(fname, 'w') as fp:
                     json.dump(cfg, fp)
                 fp.close()
 
-            # # dtribute drs across nodes
-            # pool = ThreadPool(processes=1)
-            # res = pool.apply_async(ray.get, (objects,))
-            # self.publish(drs, stage)
-            # # return_vals is list of [index, qor] 
-            # return_vals = sorted(res.get(), key=lambda x: x[0])
-
+            # Distribute drs across nodes
             self.publish(drs, stage)
             return_vals = ray.get(objects)
             results = [Result(time=item) for index, item in return_vals]
@@ -171,13 +166,13 @@ class MpiController(ParallelTuning):
         acctime, pertime = list(), list()
         accres, perres = list(), list()
         while time.time() - start_time < float(self.args.timeout): 
-            acc, per = self._best
+            acc, per = self.best_qors
             time.sleep(10)
         
             # wait until any result available 
             while acc == float('inf') and per == float('inf'): 
                 time.sleep(60)
-                acc, per = self._best
+                acc, per = self.best_qors
 
             t = np.linspace(0, int(time.time() - start_time), 10)
 
@@ -211,7 +206,7 @@ class MpiController(ParallelTuning):
 
             log.info('%s all-stage global_best: %s', 
                          str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                         str(self._best))
+                         str(self.best_qors))
   
 
     def decouple(self):
@@ -248,16 +243,16 @@ class MpiController(ParallelTuning):
 
         # instantiate api/actors and  
         apis = [self.create_tuning(x, self.create_params()) 
-                    for x in range(self._parallel)]
+                    for x in range(self.parallel)]
   
         actors = [self.cls.remote(_, self.args) 
-                      for _ in range(self._parallel)]
+                      for _ in range(self.parallel)]
   
         # the user specifies the training data + models 
         self._models = self.training(self.args.learning_models) 
   
         start_time = time.time() 
-        for epoch in range(self._limit):
+        for epoch in range(self.search_limit):
             drs, cfgs = list(), list()
             for api in apis:
                 desired_result = api.get_next_desired_result()
@@ -275,10 +270,10 @@ class MpiController(ParallelTuning):
                 cfgs.append(desired_result.configuration.data)
             
             # Start client run in parallel with ray remote
-            assert len(cfgs) == self._parallel, "All available cfgs have been explored"
+            assert len(cfgs) == self.parallel, "All available cfgs have been explored"
             log.info('%s start tuning in parallel. global_best is %f', 
                          str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                         self._best if self._best is not None else float('inf'))
+                         self.best_qors if self.best_qors is not None else float('inf'))
 
             objects = [actor.run.remote(drs[actors.index(actor)]) 
                            for actor in actors]
@@ -309,7 +304,7 @@ class MpiController(ParallelTuning):
             if elapsed_time > float(self.args.timeout): 
                 log.info('%s runtime exceeds timeout %ds. global_best is %f', 
                              str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                             int(elapsed_time), self._best)
+                             int(elapsed_time), self.best_qors)
                 break 
   
         for api in apis:
@@ -319,7 +314,7 @@ class MpiController(ParallelTuning):
 
     def publish(self, drs, stage, meta=None, aws_s3_bucket=False): 
         if not aws_s3_bucket: 
-            base = "configs/ut-dr-stage{}-index{}.json"
+            base = "configs/ut.dr_stage{}_index{}.json"
             if isinstance(drs, list):
                 # In sync execution mode. Create drs for each executor
                 cfgs = [ d.configuration.data for d in drs ]
@@ -338,7 +333,7 @@ class MpiController(ParallelTuning):
                         json.dump(cfg, fp)
             # Publish meta-data
             if meta is not None:
-                fname = "configs/ut-meta-data.json"
+                fname = "configs/ut.meta_data.json"
                 with open(fname, 'w') as fp:
                     json.dump(meta, fp)
 
@@ -348,7 +343,7 @@ class MpiController(ParallelTuning):
             s3resource = boto3.resource('s3')
             bucket_name = "uptune-aws-s3-008594ab-381e-4b67-826b-a56f4dc6c03f"
             bucket = s3resource.Bucket(bucket_name)
-            base = "ut-dr-stage{}-index{}.json"
+            base = "ut.dr_stage{}_index{}.json"
             for idx in range(len(cfgs)):
                 fname = base.format(stage, idx)
                 with open(fname, 'w') as fp:
@@ -387,10 +382,8 @@ def decouple_run_builder(cmd, timeout):
     # TODO: generate multifiles from tmpl
     filename = cmd.split()[1]
 
-    def run(self, dr):
+    def run(self, dr, global_id):
         self.start_run()
-        
-        # run the executable script with time limit
         result = self.call_program(cmd, limit=timeout)
         if result['returncode'] != 0: 
             log.warning("process collapsed with error on" + \
@@ -420,7 +413,7 @@ def decouple_run_builder(cmd, timeout):
 
         index, qor = pair
         assert isinstance(qor, (int, float)), \
-            'feedback function should return a real value'
+            'ut.target only accepets real value'
         self.end_run()
         return pair
 
@@ -463,15 +456,14 @@ def create_task_scheduler(args, command):
     # right clild - {top-for-ik} - {vi, vi+1}
     
     # Check if the parameter has been generated before
-    print('[ INFO ] Performing dynamic analysis...')
     reuse_params = pt.analysis(command)
 
-    params_record = "ut-tune-params.json"
-    params_config_dir = "ut-work-dir/configs"
-    interm_features = "ut-interim-features.json"
+    params_record = "ut.params.json"
+    params_config_dir = "ut.temp/configs"
+    interm_features = "ut.interim_features.json"
 
     if reuse_params:
-        params_record = os.path.join("ut-work-dir", params_record)
+        params_record = os.path.join("ut.temp", params_record)
     with open(params_record, 'r') as fp:
         stage = len(json.load(fp)) 
         mode = "decouple" if stage > 1 else "single"
@@ -487,7 +479,8 @@ def create_task_scheduler(args, command):
 
     use_template = True if os.path.isfile('template.tpl') else False
     if not use_template:
-        os.mkdir(params_config_dir)
+        if not os.path.exists(params_config_dir):
+            os.mkdir(params_config_dir)
 
     # set the runtime limit for cmd
     cmd_timeout = args.runtime_limit
@@ -501,5 +494,5 @@ def create_task_scheduler(args, command):
     pt.set_actor_cls(actor_cls)
 
     # Create symbolic links for read-only files
-    pt.before_run(copy=True)
+    pt.prepare_workdir(copy=True)
     return pt, mode, use_template

@@ -1,7 +1,5 @@
 import uuid, os, copy, json
 from builtins import object
-# from uptune.template.pipeline import server
-# from uptune.template.pubsub import subscriber
 from uptune.add.constraint import register, VarNode
 from uptune.template.access import request, retrieve, export_meta_data
 from uptune.src.codegen import (
@@ -93,16 +91,14 @@ class TuneBase(Registry):
         # In tuning mode, pull the proposals back from
         # the log. 
         elif os.getenv("UT_TUNE_START"): 
-            tune_params = "../ut-tune-params.json" 
+            workdir = os.getenv("UT_TEMP_DIR")
+            tune_params = os.path.join(workdir, "ut.params.json")
             if TuneBase.count == -1: 
-                assert os.path.isfile(tune_params), 'no params available'
-                assert os.getenv("UT_CURR_STAGE"), 'no specified stage'
-                assert os.getenv("UT_CURR_INDEX"), 'no specified index'
+                assert os.path.isfile(tune_params), f"{tune_params} Not Found"
+                assert os.getenv("UT_CURR_STAGE"),  "UT_CURR_STAGE Missing"
+                assert os.getenv("UT_CURR_INDEX"),  "UT_CURR_INDEX Missing"
                 stage = int(os.getenv("UT_CURR_STAGE"))
                 TuneBase.index = int(os.getenv("UT_CURR_INDEX"))
-
-                # deprecated: retrieving data from mpi channels 
-                # TuneBase.index, TuneBase.proposal = server(stage)
 
                 # Request configs from centralized controller
                 if not os.getenv('UT_AWS_S3_BUCKET'):

@@ -37,10 +37,10 @@ TAIL  = ',*\s*(.*?)\)'                             # capture name tracker
 OBJ   = r'(\S+)\s*=\s*TuneRes\((?:(max)|(min))\)'  # capture the obejctive
 
 # Unique name and result list 
-# The name defined in ut-archive.csv will be reused
+# The name defined in ut.archive.csv will be reused
 unique, objective = set(), set()
-if os.path.isfile("ut-archive.csv"):
-    names = pd.read_csv("ut-archive.csv").columns[1:-1] 
+if os.path.isfile("ut.archive.csv"):
+    names = pd.read_csv("ut.archive.csv").columns[1:-1] 
 else: names = set()
 name_counter = -1
 

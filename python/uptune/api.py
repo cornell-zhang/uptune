@@ -222,6 +222,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         def target():
             out_log = os.path.join(self.tempdir, "ut.profile.log")
             err_log = os.path.join(self.tempdir, "ut.profile.err")
+
             file_out = open(out_log, "w")
             file_err = open(err_log, "w")
             self.process = subprocess.Popen(
@@ -263,6 +264,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
             if os.path.exists(self.history):
                 keys = [ item[1] for item in self.params[0] ]
                 df = pd.read_csv(self.history)
+
                 check = [ df[k]==v for k, v in cfg.items() ]
                 dup = check.pop()
                 while len(check) > 0:
@@ -401,6 +403,7 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         # Create ray actors
         actors = []
         for p in range(self.parallel):
+
             name = "uptune_actor_p{}".format(p)
             actor = self.cls.options(name=name).remote(p, 0, self.args) 
             actors.append(actor)
@@ -448,11 +451,13 @@ class ParallelTuning(with_metaclass(abc.ABCMeta, object)):
         free_task_list = [ _ for _ in range(self.parallel) ]
         keys = [ item[1] for item in self.params[0] ]
 
+
         # objects list saves the pending tasks
         objects = list()
         drs = dict()
         while not_reach_limit:
             # Prepare inputs for free threads
+
             # The new desired result will overwrite the old ones
             drs = get_config(free_task_list, drs)
             if not template: 
@@ -845,7 +850,7 @@ class RunProgram(object):
     def end_run(self):
         os.chdir("../")
         os.rename(self.workpath + '-inuse', self.workpath)
-    
+
     def set_global_id(self, global_id):
         self.global_id = global_id
 

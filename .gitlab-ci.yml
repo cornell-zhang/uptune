@@ -1,5 +1,7 @@
 build-job:
   stage: build
+  tags:
+    - local
   script:
     - echo "Hello, $GITLAB_USER_LOGIN!"
 
